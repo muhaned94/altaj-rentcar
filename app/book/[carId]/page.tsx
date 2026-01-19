@@ -33,6 +33,20 @@ interface Branch {
     address?: string;
 }
 
+const COUNTRY_CODES = [
+    { code: "+964", label: "IQ (+964)" },
+    { code: "+971", label: "UAE (+971)" },
+    { code: "+966", label: "KSA (+966)" },
+    { code: "+965", label: "KW (+965)" },
+    { code: "+974", label: "QA (+974)" },
+    { code: "+968", label: "OM (+968)" },
+    { code: "+973", label: "BH (+973)" },
+    { code: "+962", label: "JO (+962)" },
+    { code: "+90", label: "TR (+90)" },
+    { code: "+1", label: "US (+1)" },
+    { code: "+44", label: "UK (+44)" },
+];
+
 export default function BookingPage() {
     const { language, t, dir } = useLanguage();
     const params = useParams();
@@ -56,6 +70,8 @@ export default function BookingPage() {
         branch: "",
         notes: "",
     });
+
+    const [countryCode, setCountryCode] = useState("+964");
 
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -178,7 +194,7 @@ export default function BookingPage() {
                 .insert({
                     car_id: car.id,
                     customer_name: formData.customerName,
-                    customer_phone: formData.customerPhone,
+                    customer_phone: `${countryCode} ${formData.customerPhone}`,
                     customer_email: formData.customerEmail || null,
                     start_date: formData.startDate,
                     end_date: formData.endDate,
@@ -201,7 +217,7 @@ export default function BookingPage() {
                         type: 'new_booking',
                         data: {
                             customerName: formData.customerName,
-                            phone: formData.customerPhone,
+                            phone: `${countryCode} ${formData.customerPhone}`,
                             carName: language === 'ar' && car.name_ar ? car.name_ar : car.name,
                             startDate: formData.startDate,
                             endDate: formData.endDate,
@@ -304,7 +320,7 @@ export default function BookingPage() {
         <div dir={dir}>
             <Navbar />
             <div className="min-h-screen bg-luxury-black py-8">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     {/* Back Button */}
                     <Link
                         href={`/cars/${carId}`}
@@ -346,7 +362,7 @@ export default function BookingPage() {
                                                 id="customerName"
                                                 value={formData.customerName}
                                                 onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 ${formErrors.customerName ? "border-red-500" : "border-gold/20"
+                                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 h-[50px] ${formErrors.customerName ? "border-red-500" : "border-gold/20"
                                                     }`}
                                                 placeholder={t("booking.fullNamePlaceholder")}
                                             />
@@ -365,11 +381,30 @@ export default function BookingPage() {
                                                     id="customerPhone"
                                                     value={formData.customerPhone}
                                                     onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                                                    className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 ${formErrors.customerPhone ? "border-red-500" : "border-gold/20"
-                                                        }`}
-                                                    placeholder={t("booking.phonePlaceholder")}
-                                                    dir="ltr"
+                                                    className="absolute inset-0 opacity-0 w-0 h-0"
                                                 />
+                                                <div className="flex gap-2" dir="ltr">
+                                                    <select
+                                                        value={countryCode}
+                                                        onChange={(e) => setCountryCode(e.target.value)}
+                                                        className="w-[110px] sm:w-[130px] px-2 py-3 bg-luxury-gray border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 text-sm h-[50px]"
+                                                    >
+                                                        {COUNTRY_CODES.map((country) => (
+                                                            <option key={country.code} value={country.code}>
+                                                                {country.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <input
+                                                        type="tel"
+                                                        id="phoneVisible"
+                                                        value={formData.customerPhone}
+                                                        onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                                                        className={`flex-1 px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 h-[50px] ${formErrors.customerPhone ? "border-red-500" : "border-gold/20"
+                                                            }`}
+                                                        placeholder="7xx xxx xxxx"
+                                                    />
+                                                </div>
                                                 {formErrors.customerPhone && (
                                                     <p className="text-red-400 text-sm mt-1">{formErrors.customerPhone}</p>
                                                 )}
@@ -384,7 +419,7 @@ export default function BookingPage() {
                                                     id="customerEmail"
                                                     value={formData.customerEmail}
                                                     onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-                                                    className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 ${formErrors.customerEmail ? "border-red-500" : "border-gold/20"
+                                                    className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50 h-[50px] ${formErrors.customerEmail ? "border-red-500" : "border-gold/20"
                                                         }`}
                                                     placeholder={t("booking.emailPlaceholder")}
                                                     dir="ltr"

@@ -50,7 +50,7 @@ export default function HomePage() {
                         {/* CTA Buttons */}
                         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                             <Link
-                                href="/book"
+                                href="/cars"
                                 className="btn-gold group flex items-center gap-2"
                             >
                                 {t("hero.browseFleet")}
