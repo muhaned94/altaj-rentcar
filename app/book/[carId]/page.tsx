@@ -87,14 +87,28 @@ export default function BookingPage() {
 
     async function fetchBranches() {
         try {
+            // Fetch only branches where this car is available
             const { data, error } = await supabase
                 .from("branches")
-                .select("*")
+                .select("*, car_branches!inner(car_id)")
                 .eq("is_active", true)
+                .eq("car_branches.car_id", carId)
                 .order("name");
 
             if (!error && data) {
                 setBranches(data);
+
+                // If the currently selected branch is not in the new valid list, clear it
+                if (data.length > 0) {
+                    // Check if current form branch is valid
+                    const isValid = data.some(b => b.id === formData.branch);
+                    if (!isValid && formData.branch) {
+                        setFormData(prev => ({ ...prev, branch: "" }));
+                    }
+                } else {
+                    // Handle case where car has no branches (edge case)
+                    console.warn("No branches found for this car");
+                }
             }
         } catch (err) {
             console.error("Error fetching branches:", err);
