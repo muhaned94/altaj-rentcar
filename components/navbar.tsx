@@ -56,7 +56,7 @@ export default function Navbar() {
                         {/* Desktop Actions */}
                         <div className="hidden md:flex items-center gap-3">
                             <LanguageSwitcher />
-                            <Link href="/cars" className="btn-gold text-sm">
+                            <Link href="/book" className="btn-gold text-sm">
                                 {t("nav.bookNow")}
                             </Link>
                         </div>
@@ -120,7 +120,7 @@ export default function Navbar() {
                         {/* Mobile CTA */}
                         <div className="mt-6 pt-6 border-t border-gold/20">
                             <Link
-                                href="/cars"
+                                href="/book"
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className="btn-gold w-full text-center block"
                             >
