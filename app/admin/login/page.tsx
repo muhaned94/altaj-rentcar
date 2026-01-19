@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { clearEmployeeCache } from "@/lib/auth-helpers";
 import { Crown, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
 
-export default function AdminLoginPage() {
+function LoginFormContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [email, setEmail] = useState("");
@@ -144,5 +144,17 @@ export default function AdminLoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function AdminLoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-luxury-black flex items-center justify-center">
+                <Loader2 className="h-8 w-8 text-gold animate-spin" />
+            </div>
+        }>
+            <LoginFormContent />
+        </Suspense>
     );
 }
