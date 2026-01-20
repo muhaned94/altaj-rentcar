@@ -61,6 +61,7 @@ const translations: Record<Language, Record<string, string>> = {
         "cars.model": "Model",
         "cars.year": "Year",
         "cars.color": "Color",
+        "cars.category": "Category",
         "cars.dailyRate": "Daily Rate",
         "cars.showingCount": "Showing {count} of {total} cars",
         "cars.tryAgain": "Try Again",

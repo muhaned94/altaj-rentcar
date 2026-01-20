@@ -97,7 +97,7 @@ export default function SearchBar({ onSearch, onFilterChange }: SearchBarProps) 
                         {/* Category Filter */}
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                {t("booking.branch")}
+                                {t("cars.category")}
                             </label>
                             <select
                                 onChange={(e) => handleFilterChange("categoryId", e.target.value || undefined)}

@@ -10,7 +10,9 @@ import {
     Upload,
     X,
     ArrowLeft,
-    Check
+    Check,
+    Plus,
+    Trash2
 } from "lucide-react";
 import Link from "next/link";
 
@@ -33,6 +35,12 @@ const COMMON_COLORS = [
     { name: "Other", nameAr: "لون آخر", value: "Other" },
 ];
 
+interface InventoryItem {
+    plate_number: string;
+    color: string;
+    status: string;
+}
+
 export default function NewCarPage() {
     const router = useRouter();
     const [categories, setCategories] = useState<Category[]>([]);
@@ -52,10 +60,14 @@ export default function NewCarPage() {
         colorKey: "White",
         dailyRate: "",
         categoryId: "",
-        plateNumber: "",
         status: "available",
         features: "",
     });
+
+    // Inventory State
+    const [inventory, setInventory] = useState<InventoryItem[]>([
+        { plate_number: "", color: "White", status: "available" }
+    ]);
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -100,6 +112,23 @@ export default function NewCarPage() {
         );
     }
 
+    // Inventory Helpers
+    function addInventoryItem() {
+        setInventory([...inventory, { plate_number: "", color: "White", status: "available" }]);
+    }
+
+    function removeInventoryItem(index: number) {
+        const newInv = [...inventory];
+        newInv.splice(index, 1);
+        setInventory(newInv);
+    }
+
+    function updateInventoryItem(index: number, field: keyof InventoryItem, value: string) {
+        const newInv = [...inventory];
+        newInv[index] = { ...newInv[index], [field]: value };
+        setInventory(newInv);
+    }
+
     function validateForm(): boolean {
         const newErrors: Record<string, string> = {};
 
@@ -110,7 +139,12 @@ export default function NewCarPage() {
             newErrors.dailyRate = "Valid daily rate is required";
         }
         if (selectedBranchIds.length === 0) newErrors.branches = "At least one branch is required";
-        if (!formData.plateNumber.trim()) newErrors.plateNumber = "Plate number is required";
+
+        // Validate Inventory
+        const validInventory = inventory.filter(i => i.plate_number.trim());
+        if (validInventory.length === 0) {
+            newErrors.inventory = "At least one vehicle unit (plate number) is required.";
+        }
 
         if (formData.colorKey === "Other" && !customColor.trim()) {
             newErrors.color = "Custom color is required";
@@ -144,7 +178,7 @@ export default function NewCarPage() {
                 .map((f) => f.trim())
                 .filter((f) => f.length > 0);
 
-            // Determine final color
+            // Determine final color (for the model default)
             const finalColor = formData.colorKey === "Other" ? customColor : formData.colorKey;
 
             // Insert car
@@ -156,8 +190,6 @@ export default function NewCarPage() {
                 color: finalColor,
                 daily_rate: parseFloat(formData.dailyRate),
                 category_id: formData.categoryId || null,
-                // branch_id is removed or kept null for backward compatibility if column still exists
-                plate_number: formData.plateNumber || null,
                 status: formData.status,
                 features,
                 images: uploadedPaths,
@@ -177,6 +209,26 @@ export default function NewCarPage() {
                     .insert(branchInserts);
 
                 if (branchError) throw branchError;
+            }
+
+            // Insert Inventory
+            const validInventory = inventory.filter(item => item.plate_number.trim());
+            if (newCar && validInventory.length > 0) {
+                const inventoryInserts = validInventory.map(item => ({
+                    car_id: newCar.id,
+                    plate_number: item.plate_number,
+                    color: item.color,
+                    status: item.status
+                }));
+
+                const { error: invError } = await supabase
+                    .from("car_inventory")
+                    .insert(inventoryInserts);
+
+                if (invError) {
+                    console.error("Error inserting inventory:", invError);
+                    // Verify if we should warn the user.
+                }
             }
 
             router.push("/admin/cars");
@@ -269,7 +321,7 @@ export default function NewCarPage() {
                         {/* Color Selection */}
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Color
+                                Default Color
                             </label>
                             <select
                                 value={formData.colorKey}
@@ -295,13 +347,94 @@ export default function NewCarPage() {
                     </div>
                 </div>
 
+                {/* Fleet Inventory Management */}
+                <div className="luxury-card">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-luxury-white">Fleet Inventory (Units)</h2>
+                        <button
+                            type="button"
+                            onClick={addInventoryItem}
+                            className="flex items-center gap-2 text-sm text-gold hover:text-gold-light"
+                        >
+                            <Plus className="h-4 w-4" /> Add Unit
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm text-luxury-white">
+                            <thead className="text-luxury-white/60 uppercase bg-luxury-black/30">
+                                <tr>
+                                    <th className="px-4 py-3">Plate Number *</th>
+                                    <th className="px-4 py-3">Color</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3 w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gold/10">
+                                {inventory.map((item, idx) => (
+                                    <tr key={idx}>
+                                        <td className="px-4 py-2">
+                                            <input
+                                                type="text"
+                                                value={item.plate_number}
+                                                onChange={(e) => updateInventoryItem(idx, "plate_number", e.target.value)}
+                                                className="w-full bg-transparent border border-gold/20 rounded px-2 py-1 text-luxury-white focus:border-gold/50 outline-none"
+                                                placeholder="Plate #"
+                                            />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <select
+                                                value={COMMON_COLORS.some(c => c.value === item.color) ? item.color : "Other"}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    updateInventoryItem(idx, "color", val === "Other" ? "White" : val);
+                                                }}
+                                                className="bg-transparent border border-gold/20 rounded px-2 py-1 text-luxury-white focus:border-gold/50 outline-none"
+                                            >
+                                                {COMMON_COLORS.map(c => (
+                                                    <option key={c.value} value={c.value} className="bg-luxury-gray">{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <select
+                                                value={item.status}
+                                                onChange={(e) => updateInventoryItem(idx, "status", e.target.value)}
+                                                className="bg-transparent border border-gold/20 rounded px-2 py-1 text-luxury-white focus:border-gold/50 outline-none"
+                                            >
+                                                <option value="available" className="bg-luxury-gray">Available</option>
+                                                <option value="rented" className="bg-luxury-gray">Rented</option>
+                                                <option value="maintenance" className="bg-luxury-gray">Maintenance</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => removeInventoryItem(idx)}
+                                                className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                                                title="Remove"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {inventory.length === 0 && (
+                        <p className="text-center py-4 text-luxury-white/40 text-sm">No inventory units added.</p>
+                    )}
+                    {errors.inventory && <p className="text-red-400 text-sm mt-2">{errors.inventory}</p>}
+                </div>
+
                 {/* Location & Identification */}
                 <div className="luxury-card">
-                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Location & Identification</h2>
+                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Availability</h2>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Branches Checkboxes */}
-                        <div>
+                        <div className="lg:col-span-2">
                             <label className="block text-sm font-medium text-luxury-white/80 mb-3">
                                 Available Branches *
                             </label>
@@ -311,13 +444,13 @@ export default function NewCarPage() {
                                         key={branch.id}
                                         onClick={() => toggleBranch(branch.id)}
                                         className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-all border ${selectedBranchIds.includes(branch.id)
-                                                ? "bg-gold/20 border-gold/50 text-gold"
-                                                : "hover:bg-luxury-gray/80 border-transparent text-luxury-white/70"
+                                            ? "bg-gold/20 border-gold/50 text-gold"
+                                            : "hover:bg-luxury-gray/80 border-transparent text-luxury-white/70"
                                             }`}
                                     >
                                         <div className={`w-5 h-5 rounded border flex items-center justify-center ${selectedBranchIds.includes(branch.id)
-                                                ? "bg-gold border-gold text-luxury-black"
-                                                : "border-luxury-white/30"
+                                            ? "bg-gold border-gold text-luxury-black"
+                                            : "border-luxury-white/30"
                                             }`}>
                                             {selectedBranchIds.includes(branch.id) && <Check className="h-3 w-3" />}
                                         </div>
@@ -329,21 +462,6 @@ export default function NewCarPage() {
                                 ))}
                             </div>
                             {errors.branches && <p className="text-red-400 text-sm mt-1">{errors.branches}</p>}
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Plate Number *
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.plateNumber}
-                                onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
-                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 ${errors.plateNumber ? "border-red-500" : "border-gold/20"
-                                    }`}
-                                placeholder="e.g. 123456 Baghdad"
-                            />
-                            {errors.plateNumber && <p className="text-red-400 text-sm mt-1">{errors.plateNumber}</p>}
                         </div>
                     </div>
                 </div>
@@ -388,7 +506,7 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Status
+                                Model Status
                             </label>
                             <select
                                 value={formData.status}

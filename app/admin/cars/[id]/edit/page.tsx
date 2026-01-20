@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { supabase, getImageUrl } from "@/lib/supabase";
 import { useLanguage } from "@/lib/language-context";
-import { Car, Category } from "@/lib/types";
+import { Car, Category, CarInventory } from "@/lib/types";
 import {
     ArrowLeft,
     Save,
@@ -15,7 +15,9 @@ import {
     X,
     Trash2,
     ImageIcon,
-    Check
+    Check,
+    Plus,
+    CarFront
 } from "lucide-react";
 
 interface Branch {
@@ -50,6 +52,10 @@ export default function EditCarPage() {
     const [existingImages, setExistingImages] = useState<string[]>([]);
     const [newImages, setNewImages] = useState<File[]>([]);
     const [deletedImages, setDeletedImages] = useState<string[]>([]);
+
+    // Inventory State
+    const [inventory, setInventory] = useState<Partial<CarInventory>[]>([]);
+    const [deletedInventoryIds, setDeletedInventoryIds] = useState<string[]>([]);
 
     // Multi-branch state
     const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
@@ -105,6 +111,15 @@ export default function EditCarPage() {
                 .eq("car_id", carId);
 
             if (cbError) throw cbError;
+
+            // Fetch inventory
+            const { data: invData, error: invError } = await supabase
+                .from("car_inventory")
+                .select("*")
+                .eq("car_id", carId);
+
+            if (invError) throw invError;
+            setInventory(invData || []);
 
             if (car) {
                 // Determine color state
@@ -170,7 +185,8 @@ export default function EditCarPage() {
         }
 
         if (selectedBranchIds.length === 0) newErrors.branches = language === "ar" ? "اختر فرعاً واحداً على الأقل" : "Select at least one branch";
-        if (!formData.plateNumber.trim()) newErrors.plateNumber = language === "ar" ? "مطلوب" : "Required";
+        // Plate number is now in inventory
+
 
         if (formData.colorKey === "Other" && !customColor.trim()) {
             newErrors.color = language === "ar" ? "مطلوب" : "Required";
@@ -267,6 +283,54 @@ export default function EditCarPage() {
             }
 
 
+            // 3. Update Inventory
+            // A. Delete removed
+            if (deletedInventoryIds.length > 0) {
+                await supabase
+                    .from("car_inventory")
+                    .delete()
+                    .in("id", deletedInventoryIds);
+            }
+
+            // B. Upsert (Insert/Update) current inventory
+            // Filter out items with no plate number to avoid empty rows
+            const validInventory = inventory.filter(item => item.plate_number?.trim());
+
+            if (validInventory.length > 0) {
+                const existingItems = validInventory.filter(item => item.id);
+                const newItems = validInventory.filter(item => !item.id);
+
+                // 1. Upsert Existing Items
+                if (existingItems.length > 0) {
+                    const { error: upsertError } = await supabase
+                        .from("car_inventory")
+                        .upsert(existingItems.map(item => ({
+                            id: item.id,
+                            car_id: carId,
+                            plate_number: item.plate_number,
+                            color: item.color || "White",
+                            status: item.status || 'available'
+                        })));
+
+                    if (upsertError) console.error("Inventory update error:", upsertError);
+                }
+
+                // 2. Insert New Items
+                if (newItems.length > 0) {
+                    const { error: insertError } = await supabase
+                        .from("car_inventory")
+                        .insert(newItems.map(item => ({
+                            car_id: carId,
+                            plate_number: item.plate_number,
+                            color: item.color || "White",
+                            status: item.status || 'available'
+                        })));
+
+                    if (insertError) console.error("Inventory insert error:", insertError);
+                }
+            }
+
+
             // Delete removed images from storage
             for (const img of deletedImages) {
                 await supabase.storage.from("car-images").remove([img]);
@@ -279,6 +343,25 @@ export default function EditCarPage() {
         } finally {
             setSaving(false);
         }
+    }
+
+    // Inventory Handlers
+    function addInventoryItem() {
+        setInventory([...inventory, { plate_number: "", color: "White", status: "available" }]);
+    }
+
+    function removeInventoryItem(index: number) {
+        const item = inventory[index];
+        if (item.id) {
+            setDeletedInventoryIds([...deletedInventoryIds, item.id]);
+        }
+        setInventory(inventory.filter((_, i) => i !== index));
+    }
+
+    function updateInventoryItem(index: number, field: keyof CarInventory, value: string) {
+        const newInv = [...inventory];
+        newInv[index] = { ...newInv[index], [field]: value };
+        setInventory(newInv);
     }
 
     function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -447,20 +530,76 @@ export default function EditCarPage() {
                             </div>
                             {errors.branches && <p className="text-red-400 text-sm mt-1">{errors.branches}</p>}
                         </div>
+                    </div>
+                </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                {language === "ar" ? "رقم اللوحة" : "Plate Number"} *
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.plateNumber}
-                                onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
-                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white ${errors.plateNumber ? "border-red-500" : "border-gold/20"}`}
-                                placeholder="e.g. 123456 Baghdad"
-                            />
-                            {errors.plateNumber && <p className="text-red-400 text-sm mt-1">{errors.plateNumber}</p>}
-                        </div>
+                {/* FLEET INVENTORY SECTION */}
+                <div className="luxury-card">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-luxury-white">
+                            {language === "ar" ? "إدارة المخزون (الوحدات)" : "Fleet Inventory (Units)"}
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={addInventoryItem}
+                            className="text-sm px-3 py-1 bg-gold/20 text-gold border border-gold/30 rounded hover:bg-gold/30 transition-colors flex items-center gap-1"
+                        >
+                            <Plus className="h-4 w-4" />
+                            {language === "ar" ? "إضافة سيارة" : "Add Unit"}
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {inventory.length === 0 && (
+                            <p className="text-luxury-white/40 text-sm text-center py-4 italic">
+                                {language === "ar" ? "لا توجد وحدات مضافة. أضف أرقام اللوحات." : "No units added. Add plate numbers."}
+                            </p>
+                        )}
+
+                        {inventory.map((item, idx) => (
+                            <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-luxury-black/30 p-3 rounded-lg border border-gold/10">
+                                <div className="col-span-1 flex justify-center">
+                                    <CarFront className={`h-5 w-5 ${item.status === 'rented' ? 'text-blue-400' : 'text-green-400'}`} />
+                                </div>
+                                <div className="col-span-5 sm:col-span-4">
+                                    <input
+                                        type="text"
+                                        value={item.plate_number}
+                                        onChange={(e) => updateInventoryItem(idx, 'plate_number', e.target.value)}
+                                        className="w-full px-3 py-2 bg-luxury-gray border border-gold/20 rounded text-luxury-white text-sm"
+                                        placeholder={language === "ar" ? "رقم اللوحة" : "Plate Number"}
+                                    />
+                                </div>
+                                <div className="col-span-4 sm:col-span-3">
+                                    <select
+                                        value={item.color}
+                                        onChange={(e) => updateInventoryItem(idx, 'color', e.target.value)}
+                                        className="w-full px-3 py-2 bg-luxury-gray border border-gold/20 rounded text-luxury-white text-sm"
+                                    >
+                                        {COMMON_COLORS.map(c => (
+                                            <option key={c.value} value={c.value}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="hidden sm:block sm:col-span-3 text-xs text-luxury-white/60">
+                                    {item.status}
+                                </div>
+                                <div className="col-span-2 sm:col-span-1 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => removeInventoryItem(idx)}
+                                        className="p-2 text-red-400 hover:bg-red-500/10 rounded"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gold/10">
+                        <p className="text-sm text-luxury-white/60">
+                            {language === "ar" ? `المجموع: ${inventory.length} مركبة` : `Total: ${inventory.length} vehicles`}
+                        </p>
                     </div>
                 </div>
 

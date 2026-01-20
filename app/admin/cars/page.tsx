@@ -15,7 +15,8 @@ import {
     Search,
     Loader2,
     Car as CarIcon,
-    MoreVertical
+    MoreVertical,
+    Copy
 } from "lucide-react";
 
 export default function AdminCarsPage() {
@@ -24,6 +25,7 @@ export default function AdminCarsPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [duplicating, setDuplicating] = useState<string | null>(null);
 
     useEffect(() => {
         fetchCars();
@@ -76,6 +78,67 @@ export default function AdminCarsPage() {
             alert("Failed to delete car. Please try again.");
         } finally {
             setDeleting(null);
+        }
+    }
+
+    async function handleDuplicate(car: Car) {
+        try {
+            setDuplicating(car.id);
+
+            // 1. Fetch full details (including features which might be missing in list view if we adjusted select)
+            const { data: fullCar, error: fetchError } = await supabase
+                .from("cars")
+                .select("*")
+                .eq("id", car.id)
+                .single();
+
+            if (fetchError || !fullCar) throw fetchError;
+
+            // 2. Prepare new car data
+            // We append (Copy) to Name and Plate to indicate it's a clone
+            const newCarData = {
+                ...fullCar,
+                id: undefined, // Let DB generate ID
+                created_at: undefined,
+                updated_at: undefined,
+                name: `${fullCar.name} (Copy)`,
+                plate_number: fullCar.plate_number ? `${fullCar.plate_number}-CPY` : null,
+                status: 'available' // Reset status to available
+            };
+
+            // 3. Insert new car
+            const { data: insertedCar, error: insertError } = await supabase
+                .from("cars")
+                .insert(newCarData)
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // 4. Duplicate Branch Association
+            // We need to fetch the branches for the original car first
+            const { data: carBranches } = await supabase
+                .from("car_branches")
+                .select("branch_id")
+                .eq("car_id", car.id);
+
+            if (carBranches && carBranches.length > 0) {
+                const branchInserts = carBranches.map((cb: any) => ({
+                    car_id: insertedCar.id,
+                    branch_id: cb.branch_id
+                }));
+                await supabase.from("car_branches").insert(branchInserts);
+            }
+
+            // 5. Refresh List
+            fetchCars(); // Simpler than optimistic update here
+            alert("Car duplicated successfully!");
+
+        } catch (error) {
+            console.error("Error duplicating car:", error);
+            alert("Failed to duplicate car.");
+        } finally {
+            setDuplicating(null);
         }
     }
 
@@ -143,6 +206,7 @@ export default function AdminCarsPage() {
                                 <thead>
                                     <tr className="border-b border-gold/20 bg-luxury-gray/50">
                                         <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Car</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Plate</th>
                                         <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Category</th>
                                         <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Year</th>
                                         <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Daily Rate</th>
@@ -170,6 +234,13 @@ export default function AdminCarsPage() {
                                                 </div>
                                             </td>
                                             <td className="p-4 text-luxury-white/80">
+                                                {car.plate_number ? (
+                                                    <span className="bg-luxury-black border border-gold/20 px-2 py-1 rounded text-xs text-gold font-mono">
+                                                        {car.plate_number}
+                                                    </span>
+                                                ) : "—"}
+                                            </td>
+                                            <td className="p-4 text-luxury-white/80">
                                                 {car.category?.name || "—"}
                                             </td>
                                             <td className="p-4 text-luxury-white/80">{car.year}</td>
@@ -189,6 +260,18 @@ export default function AdminCarsPage() {
                                                     >
                                                         <Pencil className="h-4 w-4" />
                                                     </Link>
+                                                    <button
+                                                        onClick={() => handleDuplicate(car)}
+                                                        disabled={duplicating === car.id}
+                                                        className="p-2 text-luxury-white/60 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors disabled:opacity-50"
+                                                        title="Duplicate Car"
+                                                    >
+                                                        {duplicating === car.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Copy className="h-4 w-4" />
+                                                        )}
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDelete(car)}
                                                         disabled={deleting === car.id}

@@ -122,19 +122,31 @@ export default function AdminDashboard() {
                 }
             }
 
-            // Fetch cars stats - Use same approach as Cars page for consistency
-            const { count: totalCars } = await safeQuery(async () => {
-                let q = supabase.from("cars").select("id, car_branches!inner(branch_id)", { count: "exact", head: true });
+            // Fetch allowed cars first (Branch Filter)
+            const { data: allowedCars } = await safeQuery(async () => {
+                let q = supabase.from("cars").select("id, car_branches!inner(branch_id)");
                 return await applyBranchFilter(q, 'car_branches.branch_id');
             });
-            const { count: availableCars } = await safeQuery(async () => {
-                let q = supabase.from("cars").select("id, car_branches!inner(branch_id)", { count: "exact", head: true }).eq("status", "available");
-                return await applyBranchFilter(q, 'car_branches.branch_id');
-            });
-            const { count: rentedCars } = await safeQuery(async () => {
-                let q = supabase.from("cars").select("id, car_branches!inner(branch_id)", { count: "exact", head: true }).eq("status", "rented");
-                return await applyBranchFilter(q, 'car_branches.branch_id');
-            });
+            const carIds = allowedCars ? (allowedCars as any[]).map(c => c.id) : [];
+
+            // Fetch Inventory Stats based on allowed cars
+            const { count: totalCars } = carIds.length > 0 ? await safeQuery(async () =>
+                await supabase.from("car_inventory").select("id", { count: "exact", head: true })
+                    .in("car_id", carIds)
+                    .neq("status", "maintenance")
+            ) : { count: 0 };
+
+            const { count: availableCars } = carIds.length > 0 ? await safeQuery(async () =>
+                await supabase.from("car_inventory").select("id", { count: "exact", head: true })
+                    .in("car_id", carIds)
+                    .eq("status", "available")
+            ) : { count: 0 };
+
+            const { count: rentedCars } = carIds.length > 0 ? await safeQuery(async () =>
+                await supabase.from("car_inventory").select("id", { count: "exact", head: true })
+                    .in("car_id", carIds)
+                    .eq("status", "rented")
+            ) : { count: 0 };
 
             // Fetch bookings stats
             const { count: totalBookings } = await safeQuery(() => applyBranchFilter(supabase.from("bookings").select("id", { count: "exact", head: true }), 'branch_id'));

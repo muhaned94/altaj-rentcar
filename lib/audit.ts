@@ -4,16 +4,12 @@ export async function logAction(action: string, resourceId?: string, details?: s
     try {
         // Get current user
         const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-            console.warn("Attempted to log action without authenticated user");
-            return;
-        }
+        const userEmail = user?.email || 'Public User';
 
         const { error } = await supabase
             .from('audit_logs')
             .insert({
-                user_email: user.email,
+                user_email: userEmail,
                 action,
                 resource_id: resourceId,
                 details

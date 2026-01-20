@@ -9,11 +9,18 @@ import { Loader2, Printer, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/lib/language-context";
 
+interface BookingWithInventory extends Booking {
+    inventory?: {
+        plate_number: string;
+        color: string;
+    }
+}
+
 export default function ContractPage() {
     const { language } = useLanguage();
     const params = useParams();
     const bookingId = params.id as string;
-    const [booking, setBooking] = useState<Booking | null>(null);
+    const [booking, setBooking] = useState<BookingWithInventory | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -24,7 +31,7 @@ export default function ContractPage() {
         try {
             const { data, error } = await supabase
                 .from("bookings")
-                .select("*, car:cars(name, name_ar, model, year, color, daily_rate, plate_number)")
+                .select("*, car:cars(name, name_ar, model, year, color, daily_rate, plate_number), inventory:car_inventory(plate_number, color)")
                 .eq("id", bookingId)
                 .single();
 
@@ -195,11 +202,15 @@ export default function ContractPage() {
                                 <span className="font-bold text-black border-b border-dotted border-black flex-1 pb-1">{booking.car?.year}</span>
                             </div>
                             <div className="flex gap-2 items-baseline">
-                                <span className="font-bold text-black border-b border-dotted border-black flex-1 pb-1">{booking.car?.color || "-"}</span>
+                                <span className="font-bold text-black border-b border-dotted border-black flex-1 pb-1">
+                                    {booking.inventory?.color || booking.car?.color || "-"}
+                                </span>
                             </div>
                             <div className="flex gap-2 items-baseline">
                                 <span className="text-black font-bold min-w-[120px]">Plate No. / اللوحة:</span>
-                                <span className="font-bold text-black border-b border-dotted border-black flex-1 pb-1">{booking.car?.plate_number || "-"}</span>
+                                <span className="font-bold text-black border-b border-dotted border-black flex-1 pb-1">
+                                    {booking.inventory?.plate_number || booking.car?.plate_number || "-"}
+                                </span>
                             </div>
                         </div>
                     </div>

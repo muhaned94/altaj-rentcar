@@ -80,6 +80,7 @@ export default function LogsPage() {
 
     const getActionColor = (action: string) => {
         if (action.includes("APPROVE")) return "text-green-400";
+        if (action.includes("EDIT") || action.includes("UPDATE")) return "text-blue-400";
         if (action.includes("REJECT") || action.includes("DELETE")) return "text-red-400";
         return "text-gold";
     };
@@ -126,11 +127,11 @@ export default function LogsPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-gold/10 bg-luxury-black/20 text-xs uppercase text-luxury-white/60">
-                                    <th className="p-4">{language === "ar" ? "الوقت" : "Time"}</th>
-                                    <th className="p-4">{language === "ar" ? "المسؤول" : "Admin"}</th>
-                                    <th className="p-4">{language === "ar" ? "الإجراء" : "Action"}</th>
-                                    <th className="p-4">{language === "ar" ? "الزبون" : "Customer"}</th>
-                                    <th className="p-4">{language === "ar" ? "السيارة" : "Car"}</th>
+                                    <th className="p-4 w-32">{language === "ar" ? "الوقت" : "Time"}</th>
+                                    <th className="p-4 w-32">{language === "ar" ? "المسؤول" : "Admin"}</th>
+                                    <th className="p-4 w-32">{language === "ar" ? "الإجراء" : "Action"}</th>
+                                    <th className="p-4 w-40">{language === "ar" ? "الزبون" : "Customer"}</th>
+                                    <th className="p-4 w-48">{language === "ar" ? "السيارة" : "Car"}</th>
                                     <th className="p-4">{language === "ar" ? "التفاصيل" : "Details"}</th>
                                 </tr>
                             </thead>
@@ -144,7 +145,6 @@ export default function LogsPage() {
                                 ) : (
                                     filteredLogs.map((log) => {
                                         // Simple manual parsing of the details string
-                                        // Format: "Status: ... | Customer: ... | Car: ... | Dates: ..."
                                         const parts = log.details?.includes("|")
                                             ? log.details.split("|").reduce((acc: any, part) => {
                                                 const [k, v] = part.split(":").map(s => s.trim());
@@ -159,7 +159,9 @@ export default function LogsPage() {
                                             'REJECT_BOOKING': 'رفض حجز',
                                             'COMPLETE_BOOKING': 'إكمال حجز',
                                             'UPDATE_STATUS': 'تحديث حالة',
-                                            'DELETE_BOOKING': 'حذف حجز'
+                                            'EDIT_BOOKING': 'تعديل حجز',
+                                            'DELETE_BOOKING': 'حذف حجز',
+                                            'NEW_BOOKING_REQUEST': 'طلب حجز جديد'
                                         };
 
                                         const statusMap: Record<string, string> = {
@@ -169,56 +171,100 @@ export default function LogsPage() {
                                             'pending': 'قيد الانتظار'
                                         };
 
+                                        // Status Colors
+                                        const getStatusColor = (s: string) => {
+                                            switch (s) {
+                                                case 'confirmed': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+                                                case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
+                                                case 'cancelled': return 'bg-red-500/20 text-red-400 border-red-500/30';
+                                                case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+                                                default: return 'bg-white/5 border-white/10 text-white/60';
+                                            }
+                                        };
+
                                         // Get Display Values
                                         const displayAction = language === 'ar'
                                             ? (actionMap[log.action] || log.action)
-                                            : log.action.replace('_BOOKING', '');
+                                            : log.action.replace('_BOOKING', '').replace('_', ' ');
 
                                         const rawStatus = parts ? parts['status'] : '';
                                         const displayStatus = (language === 'ar' && statusMap[rawStatus])
-                                            ? statusMap[rawStatus]
-                                            : (rawStatus || (log.details.length > 30 ? log.details.substring(0, 30) + '...' : log.details));
+                                            ? statusMap[rawStatus.toLowerCase()]
+                                            : (rawStatus || (log.details.length > 50 ? log.details.substring(0, 50) + '...' : log.details));
+
+                                        const color = parts ? (parts['color'] || '').toLowerCase() : null;
 
                                         return (
-                                            <tr key={log.id} className="hover:bg-white/5 transition-colors text-sm">
+                                            <tr key={log.id} className="hover:bg-white/5 transition-colors text-sm group">
                                                 {/* Time */}
-                                                <td className="p-4 text-luxury-white/60 font-mono whitespace-nowrap">
+                                                <td className="p-4 text-luxury-white/60 font-mono whitespace-nowrap align-top">
                                                     {format(new Date(log.created_at), 'yyyy-MM-dd HH:mm')}
                                                 </td>
 
                                                 {/* Admin */}
-                                                <td className="p-4">
+                                                <td className="p-4 align-top">
                                                     <div className="flex items-center gap-2">
                                                         <div className="p-1 bg-white/10 rounded-full">
                                                             <User className="h-3 w-3 text-luxury-white" />
                                                         </div>
-                                                        <span className="text-luxury-white text-xs max-w-[150px] truncate" title={log.user_email}>
-                                                            {log.user_email.split('@')[0]}
+                                                        <span className="text-luxury-white text-xs max-w-[120px] truncate" title={log.user_email}>
+                                                            {log.user_email?.split('@')[0] || 'System'}
                                                         </span>
                                                     </div>
                                                 </td>
 
                                                 {/* Action */}
-                                                <td className={`p-4 font-bold text-xs ${getActionColor(log.action)}`}>
+                                                <td className={`p-4 font-bold text-xs align-top ${getActionColor(log.action)}`}>
                                                     {displayAction}
                                                 </td>
 
-                                                {/* Customer (Parsed or -) */}
-                                                <td className="p-4 text-luxury-white">
+                                                {/* Customer */}
+                                                <td className="p-4 text-luxury-white align-top">
                                                     {parts ? parts['customer'] : "-"}
                                                 </td>
 
-                                                {/* Car (Parsed or -) */}
-                                                <td className="p-4 text-luxury-white/80">
-                                                    {parts ? parts['car'] : "-"}
+                                                {/* Car */}
+                                                <td className="p-4 text-luxury-white/80 align-top">
+                                                    {parts ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-medium text-white">{parts['car']}</span>
+                                                                {color && (
+                                                                    <div
+                                                                        className="w-3 h-3 rounded-full border border-white/30 shadow-sm"
+                                                                        style={{ backgroundColor: color }}
+                                                                        title={`Color: ${parts['color']}`}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                            {parts['plate'] && (
+                                                                <span className="text-[10px] text-gold/80 font-mono bg-black/40 px-1.5 py-0.5 rounded w-fit">
+                                                                    {parts['plate']}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : "-"}
                                                 </td>
 
-                                                {/* Details/Status */}
-                                                <td className="p-4 text-luxury-white/60 text-xs max-w-xs truncate" title={log.details}>
-                                                    {parts
-                                                        ? <span className="px-2 py-1 rounded bg-white/5 border border-white/10">{displayStatus}</span>
-                                                        : displayStatus
-                                                    }
+                                                {/* Details */}
+                                                <td className="p-4 text-luxury-white/70 text-xs align-top">
+                                                    <div className="whitespace-pre-wrap">
+                                                        {parts && parts['status'] ? (
+                                                            <span className={`inline-block px-2 py-1 rounded border mb-1 ${getStatusColor(parts['status'])}`}>
+                                                                {displayStatus}
+                                                            </span>
+                                                        ) : (
+                                                            <span>{displayStatus}</span>
+                                                        )}
+                                                        {/* Show diff changes if any */}
+                                                        {log.details.includes("->") && (
+                                                            <div className="mt-1 text-white/50 space-y-0.5">
+                                                                {log.details.split('|').filter(p => p.includes("->")).map((p, i) => (
+                                                                    <div key={i}>{p.trim()}</div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

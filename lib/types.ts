@@ -35,9 +35,19 @@ export interface Car {
     car_branches?: { branches: Branch }[]; // For joined queries
 }
 
+export interface CarInventory {
+    id: string;
+    car_id: string;
+    plate_number: string;
+    color: string;
+    status: 'available' | 'rented' | 'maintenance';
+    created_at: string;
+}
+
 export interface Booking {
     id: string;
     car_id: string;
+    inventory_id?: string;
     customer_name: string;
     customer_phone: string;
     customer_email?: string;

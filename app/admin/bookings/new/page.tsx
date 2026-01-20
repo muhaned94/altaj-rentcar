@@ -21,6 +21,20 @@ interface GroupedCar extends Car {
     availableIds: string[];
 }
 
+const COUNTRY_CODES = [
+    { code: "+964", label: "IQ (+964)" },
+    { code: "+971", label: "UAE (+971)" },
+    { code: "+966", label: "KSA (+966)" },
+    { code: "+965", label: "KW (+965)" },
+    { code: "+974", label: "QA (+974)" },
+    { code: "+968", label: "OM (+968)" },
+    { code: "+973", label: "BH (+973)" },
+    { code: "+962", label: "JO (+962)" },
+    { code: "+90", label: "TR (+90)" },
+    { code: "+1", label: "US (+1)" },
+    { code: "+44", label: "UK (+44)" },
+];
+
 export default function AdminNewBookingPage() {
     const { language, dir } = useLanguage();
     const router = useRouter();
@@ -29,6 +43,7 @@ export default function AdminNewBookingPage() {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [availableCars, setAvailableCars] = useState<Car[]>([]);
     const [selectedCar, setSelectedCar] = useState<Car | null>(null);
+    const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
     const [loadingCars, setLoadingCars] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -50,6 +65,7 @@ export default function AdminNewBookingPage() {
         paymentStatus: "paid" as "paid" | "pending",
     });
 
+    const [countryCode, setCountryCode] = useState("+964");
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
@@ -177,8 +193,9 @@ export default function AdminNewBookingPage() {
                 .from("bookings")
                 .insert({
                     car_id: selectedCar.id,
+                    inventory_id: selectedInventoryId || null, // Assign specific unit if selected
                     customer_name: formData.customerName,
-                    customer_phone: formData.customerPhone,
+                    customer_phone: `${countryCode} ${formData.customerPhone}`,
                     customer_email: formData.customerEmail || null,
                     national_id: formData.nationalId || null,
                     start_date: formData.startDate,
@@ -369,39 +386,87 @@ export default function AdminNewBookingPage() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {uniqueCars.map(car => (
-                                <div
-                                    key={car.id}
-                                    onClick={() => setSelectedCar(car)}
-                                    className={`luxury-card cursor-pointer border-2 transition-all ${selectedCar?.id === car.id ? 'border-gold bg-gold/5' : 'border-transparent hover:border-gold/30'}`}
-                                >
-                                    <div className="relative h-48 mb-4 rounded bg-black/40">
-                                        <Image src={getImageUrl(car.images[0])} alt={car.name} fill className="object-cover rounded" />
-                                    </div>
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h3 className="font-bold text-luxury-white">
-                                                {language === "ar" && car.name_ar ? car.name_ar : car.name}
-                                            </h3>
-                                            <p className="text-sm text-luxury-white/60">{car.model} • {car.year}</p>
+                            {uniqueCars.map(car => {
+                                const isSelected = selectedCar?.id === car.id;
+
+                                return (
+                                    <div
+                                        key={car.id}
+                                        onClick={() => {
+                                            setSelectedCar(car);
+                                            setSelectedInventoryId(null);
+                                        }}
+                                        className={`luxury-card cursor-pointer border-2 transition-all ${isSelected ? 'border-gold bg-gold/5' : 'border-transparent hover:border-gold/30'}`}
+                                    >
+                                        <div className="relative h-48 mb-4 rounded bg-black/40">
+                                            <Image src={getImageUrl(car.images[0])} alt={car.name} fill className="object-cover rounded" />
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-gold">{formatCurrency(car.daily_rate, language)}</p>
-                                            <p className="text-xs text-luxury-white/50">
-                                                {language === "ar" ? "/ يوم" : "/ day"}
-                                            </p>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h3 className="font-bold text-luxury-white">
+                                                    {language === "ar" && car.name_ar ? car.name_ar : car.name}
+                                                </h3>
+                                                <p className="text-sm text-luxury-white/60">{car.model} • {car.year}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-bold text-gold">{formatCurrency(car.daily_rate, language)}</p>
+                                                <p className="text-xs text-luxury-white/50">
+                                                    {language === "ar" ? "/ يوم" : "/ day"}
+                                                </p>
+                                            </div>
                                         </div>
+
+                                        {/* Inventory / Color Selection */}
+                                        {isSelected && (car as any).available_units && (car as any).available_units.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
+                                                <p className="text-xs text-luxury-white/60 mb-2">
+                                                    {language === "ar" ? "اختر لون السيارة (اختياري):" : "Select Vehicle Color (Optional):"}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(car as any).available_units.map((unit: any) => (
+                                                        <button
+                                                            key={unit.id}
+                                                            onClick={() => setSelectedInventoryId(unit.id === selectedInventoryId ? null : unit.id)}
+                                                            className={`group relative p-1 rounded-full border-2 transition-all ${unit.id === selectedInventoryId ? 'border-gold scale-110' : 'border-transparent hover:border-white/50'}`}
+                                                            title={`${unit.color} - ${unit.plate_number}`}
+                                                        >
+                                                            <div
+                                                                className="w-6 h-6 rounded-full shadow-sm border border-white/10"
+                                                                style={{ backgroundColor: unit.color?.toLowerCase() }}
+                                                            />
+                                                            {/* Tooltip or Plate indicator */}
+                                                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-20">
+                                                                {unit.plate_number}
+                                                            </span>
+                                                            {unit.id === selectedInventoryId && (
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <CheckCircle className="w-4 h-4 text-white drop-shadow-md" />
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
                     {selectedCar && (
                         <div className="fixed bottom-0 left-0 right-0 p-4 bg-luxury-black border-t border-gold/20 flex justify-center z-10">
-                            <button onClick={handleNextStep} className="btn-gold px-12 py-3 shadow-lg shadow-gold/20">
-                                {language === "ar" ? "متابعة" : "Continue"}
-                            </button>
+                            <div className="flex flex-col items-center gap-2">
+                                {selectedInventoryId && (
+                                    <div className="text-xs text-gold flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3" />
+                                        {language === "ar" ? "تم تحديد وحدة معينة" : "Specific unit selected"}
+                                    </div>
+                                )}
+                                <button onClick={handleNextStep} className="btn-gold px-12 py-3 shadow-lg shadow-gold/20">
+                                    {language === "ar" ? "متابعة" : "Continue"}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -439,14 +504,26 @@ export default function AdminNewBookingPage() {
                                         <label className="block text-sm text-luxury-white/70 mb-2">
                                             {language === "ar" ? "رقم الهاتف *" : "Phone Number *"}
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={formData.customerPhone}
-                                            onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
-                                            className="w-full bg-luxury-gray border border-gold/20 rounded-lg px-4 py-3 text-luxury-white focus:border-gold/50 outline-none"
-                                            placeholder="+964..."
-                                            dir="ltr"
-                                        />
+                                        <div className="flex gap-2" dir="ltr">
+                                            <select
+                                                value={countryCode}
+                                                onChange={(e) => setCountryCode(e.target.value)}
+                                                className="w-[110px] bg-luxury-gray border border-gold/20 rounded-lg px-2 py-3 text-luxury-white focus:border-gold/50 outline-none text-sm h-[50px]"
+                                            >
+                                                {COUNTRY_CODES.map((country) => (
+                                                    <option key={country.code} value={country.code}>
+                                                        {country.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={formData.customerPhone}
+                                                onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
+                                                className="flex-1 bg-luxury-gray border border-gold/20 rounded-lg px-4 py-3 text-luxury-white focus:border-gold/50 outline-none h-[50px]"
+                                                placeholder="7xx xxx xxxx"
+                                            />
+                                        </div>
                                         {formErrors.customerPhone && <p className="text-red-400 text-sm mt-1">{formErrors.customerPhone}</p>}
                                     </div>
                                     <div>

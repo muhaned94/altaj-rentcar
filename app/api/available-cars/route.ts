@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         // Get bookings that overlap with the requested dates
         const { data: conflictingBookings, error: bookingsError } = await supabase
             .from("bookings")
-            .select("car_id")
+            .select("car_id, inventory_id")
             .in("status", ["pending", "confirmed"])
             .lte("start_date", endDate)
             .gte("end_date", startDate);
@@ -54,9 +54,54 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: bookingsError.message }, { status: 500 });
         }
 
-        const bookedCarIds = new Set(conflictingBookings?.map((b) => b.car_id) || []);
+        // Get Inventory Items
+        const { data: inventoryData, error: inventoryError } = await supabase
+            .from("car_inventory")
+            .select("id, car_id, plate_number, color, status")
+            .neq("status", "maintenance");
 
-        const availableCars = allCars?.filter((car) => !bookedCarIds.has(car.id)) || [];
+        if (inventoryError) {
+            console.error("Error fetching inventory:", inventoryError);
+            return NextResponse.json({ error: inventoryError.message }, { status: 500 });
+        }
+
+        // Get booked inventory IDs
+        const bookedInventoryIds = new Set<string>();
+        // And count anonymous bookings per car (bookings without inventory_id assigned yet)
+        const anonymousBookingsCount: Record<string, number> = {};
+
+        conflictingBookings?.forEach(b => {
+            if (b.inventory_id) {
+                bookedInventoryIds.add(b.inventory_id);
+            } else {
+                anonymousBookingsCount[b.car_id] = (anonymousBookingsCount[b.car_id] || 0) + 1;
+            }
+        });
+
+        // Map Inventory to Cars
+        const inventoryByCar: Record<string, typeof inventoryData> = {};
+        inventoryData?.forEach(item => {
+            if (!inventoryByCar[item.car_id]) inventoryByCar[item.car_id] = [];
+            inventoryByCar[item.car_id].push(item);
+        });
+
+        const availableCars = allCars?.map((car) => {
+            const carInventory = inventoryByCar[car.id] || [];
+
+            // Filter out specifically booked units
+            let availableUnits = carInventory.filter(unit => !bookedInventoryIds.has(unit.id));
+
+            // Check availability including anonymous bookings
+            const anonCount = anonymousBookingsCount[car.id] || 0;
+            const isAvailable = (availableUnits.length - anonCount) > 0;
+
+            if (!isAvailable) return null;
+
+            return {
+                ...car,
+                available_units: availableUnits // Frontend can visualize these
+            };
+        }).filter(Boolean) || [];
 
         return NextResponse.json({
             cars: availableCars,

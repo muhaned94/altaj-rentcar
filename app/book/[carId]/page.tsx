@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,13 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase, getImageUrl } from "@/lib/supabase";
+import { logAction } from "@/lib/audit";
 import { Car } from "@/lib/types";
 import { formatCurrency, calculateDays, calculateTotalAmount } from "@/lib/utils";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import {
     ArrowLeft,
-    Calendar,
+    Calendar as CalendarIcon,
     User,
     Phone,
     Mail,
@@ -22,9 +22,13 @@ import {
     CreditCard,
     MapPin,
     Clock,
-    ChevronRight
+    ChevronRight,
+    Check
 } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
+import { Calendar } from "@/components/ui/calendar";
+import { addDays, format, isWithinInterval, startOfDay, parseISO, isSameDay } from "date-fns";
+import { DateRange } from "react-day-picker";
 
 interface Branch {
     id: string;
@@ -75,12 +79,172 @@ export default function BookingPage() {
 
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+    // Inventory State for Colors
+    const [availableUnits, setAvailableUnits] = useState<any[]>([]);
+    const [selectedUnit, setSelectedUnit] = useState<any>(null);
+    const [checkingAvailability, setCheckingAvailability] = useState(false);
+
+    // Calendar State
+    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [inventoryCount, setInventoryCount] = useState(0);
+    const [allBookings, setAllBookings] = useState<any[]>([]);
+
+    // Fetch Calendar Data (Inventory Count + All Bookings)
     useEffect(() => {
         if (carId) {
+            fetchCalendarData();
             fetchCar();
             fetchBranches();
         }
     }, [carId]);
+
+    // Sync formData to dateRange (initial load or external change)
+    useEffect(() => {
+        if (formData.startDate && formData.endDate && !dateRange) {
+            setDateRange({
+                from: parseISO(formData.startDate),
+                to: parseISO(formData.endDate)
+            });
+        }
+    }, [formData.startDate, formData.endDate]);
+
+    async function fetchCalendarData() {
+        try {
+            // 1. Get Inventory Count
+            const { count, error: countError } = await supabase
+                .from("car_inventory")
+                .select("id", { count: "exact", head: true })
+                .eq("car_id", carId)
+                .neq("status", "maintenance");
+
+            if (countError) console.error("Error fetching count:", countError);
+            setInventoryCount(count || 0);
+
+            // 2. Get All Future Bookings
+            const { data: bookings, error: bookError } = await supabase
+                .from("bookings")
+                .select("start_date, end_date")
+                .eq("car_id", carId)
+                .in("status", ["pending", "confirmed"])
+                .gte("end_date", new Date().toISOString().split('T')[0]); // Bookings ending in future
+
+            if (bookError) console.error("Error fetching bookings:", bookError);
+            setAllBookings(bookings || []);
+
+        } catch (err) {
+            console.error("Calendar Data Error:", err);
+        }
+    }
+
+    // Check if a date is fully booked
+    const isDateDisabled = (date: Date) => {
+        // 1. Past dates
+        if (date < startOfDay(new Date())) return true;
+
+        // 2. No inventory? 
+        if (inventoryCount === 0) return true;
+
+        // 3. Check Overlap Count
+        const dateStr = format(date, 'yyyy-MM-dd');
+
+        let activeBookings = 0;
+        for (const b of allBookings) {
+            if (dateStr >= b.start_date && dateStr <= b.end_date) {
+                activeBookings++;
+            }
+        }
+
+        return activeBookings >= inventoryCount;
+    };
+
+    const handleDateSelect = (range: DateRange | undefined) => {
+        setDateRange(range);
+
+        if (range?.from) {
+            if (range.to) {
+                // Check overlap
+                let curr = range.from;
+                let hasDisabled = false;
+                // Limit loop 
+                let limit = 0;
+                while (curr <= range.to && limit < 365) {
+                    if (isDateDisabled(curr)) {
+                        hasDisabled = true;
+                        break;
+                    }
+                    curr = addDays(curr, 1);
+                    limit++;
+                }
+
+                if (hasDisabled) {
+                    setDateRange({ from: range.from, to: undefined });
+                    setFormData(prev => ({
+                        ...prev,
+                        startDate: format(range.from!, 'yyyy-MM-dd'),
+                        endDate: ""
+                    }));
+                    return;
+                }
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                startDate: format(range.from!, 'yyyy-MM-dd'),
+                endDate: range.to ? format(range.to, 'yyyy-MM-dd') : ""
+            }));
+        } else {
+            setFormData(prev => ({ ...prev, startDate: "", endDate: "" }));
+        }
+    };
+
+    // Trigger checkAvailability for Colors when dates change
+    useEffect(() => {
+        if (carId && formData.startDate && formData.endDate) {
+            checkAvailability();
+        }
+    }, [carId, formData.startDate, formData.endDate]);
+
+    async function checkAvailability() {
+        try {
+            setCheckingAvailability(true);
+            setAvailableUnits([]);
+            setSelectedUnit(null);
+
+            // 1. Fetch Inventory
+            const { data: inventory, error: invError } = await supabase
+                .from("car_inventory")
+                .select("*")
+                .eq("car_id", carId)
+                .neq("status", "maintenance");
+
+            if (invError) throw invError;
+            if (!inventory || inventory.length === 0) {
+                return; // No inventory at all
+            }
+
+            // 2. Fetch Conflicting Bookings
+            const { data: bookings, error: bookError } = await supabase
+                .from("bookings")
+                .select("inventory_id")
+                .eq("car_id", carId)
+                .in("status", ["pending", "confirmed"])
+                .lte("start_date", formData.endDate)
+                .gte("end_date", formData.startDate);
+
+            if (bookError) throw bookError;
+
+            // 3. Filter Available
+            const bookedIds = new Set(bookings?.map(b => b.inventory_id).filter(Boolean));
+            const available = inventory.filter(item => !bookedIds.has(item.id));
+
+            setAvailableUnits(available);
+
+        } catch (err) {
+            console.error("Error checking availability:", err);
+        } finally {
+            setCheckingAvailability(false);
+        }
+    }
 
     async function fetchCar() {
         try {
@@ -103,7 +267,6 @@ export default function BookingPage() {
 
     async function fetchBranches() {
         try {
-            // Fetch only branches where this car is available
             const { data, error } = await supabase
                 .from("branches")
                 .select("*, car_branches!inner(car_id)")
@@ -113,17 +276,11 @@ export default function BookingPage() {
 
             if (!error && data) {
                 setBranches(data);
-
-                // If the currently selected branch is not in the new valid list, clear it
                 if (data.length > 0) {
-                    // Check if current form branch is valid
                     const isValid = data.some(b => b.id === formData.branch);
                     if (!isValid && formData.branch) {
                         setFormData(prev => ({ ...prev, branch: "" }));
                     }
-                } else {
-                    // Handle case where car has no branches (edge case)
-                    console.warn("No branches found for this car");
                 }
             }
         } catch (err) {
@@ -189,24 +346,85 @@ export default function BookingPage() {
             const selectedBranchObj = branches.find(b => b.id === formData.branch);
             const branchName = selectedBranchObj ? `${selectedBranchObj.name_ar} - ${selectedBranchObj.name}` : '';
 
-            const { error: insertError } = await supabase
+            // Append color notes if selected
+            const finalNotes = selectedUnit
+                ? `${formData.notes || ""} \n[System]: Client preferred color: ${selectedUnit.color} (Plate: ${selectedUnit.plate_number})`.trim()
+                : formData.notes;
+
+            // Conflict Check for Specific Unit
+            if (selectedUnit) {
+                const { data: conflicts } = await supabase
+                    .from("bookings")
+                    .select("id")
+                    .eq("inventory_id", selectedUnit.id)
+                    .in("status", ["pending", "confirmed"])
+                    .lte("start_date", formData.endDate)
+                    .gte("end_date", formData.startDate);
+
+                if (conflicts && conflicts.length > 0) {
+                    throw new Error(language === "ar" ? "هذه السيارة محجوزة مسبقاً في الفترة المحددة" : "This car is already reserved for the selected period");
+                }
+            }
+
+            // Upsert Customer Profile to persist customer data
+            // We check existence first to preserve the original name if already registered
+            try {
+                const customerPhone = `${countryCode} ${formData.customerPhone}`;
+                const { data: existingProfile } = await supabase
+                    .from("customer_profiles")
+                    .select("phone_number")
+                    .eq("phone_number", customerPhone)
+                    .single();
+
+                if (!existingProfile) {
+                    await supabase.from("customer_profiles").insert({
+                        phone_number: customerPhone,
+                        full_name: formData.customerName,
+                        updated_at: new Date().toISOString()
+                    });
+                } else {
+                    // Just update timestamp
+                    await supabase.from("customer_profiles")
+                        .update({ updated_at: new Date().toISOString() })
+                        .eq("phone_number", customerPhone);
+                }
+            } catch (e) {
+                console.warn("Failed to handle customer profile:", e);
+            }
+
+            const { data: newBooking, error: insertError } = await supabase
                 .from("bookings")
                 .insert({
                     car_id: car.id,
+                    inventory_id: selectedUnit ? selectedUnit.id : null,
                     customer_name: formData.customerName,
                     customer_phone: `${countryCode} ${formData.customerPhone}`,
                     customer_email: formData.customerEmail || null,
                     start_date: formData.startDate,
                     end_date: formData.endDate,
                     pickup_time: formData.pickupTime,
-                    branch: branchName, // Human readable branch name
-                    branch_id: formData.branch, // UUID for RLS filtering
+                    branch: branchName,
+                    branch_id: formData.branch,
                     total_amount: totalAmount,
-                    notes: formData.notes || null,
+                    notes: finalNotes || null,
                     status: "pending",
-                });
+                })
+                .select()
+                .single();
 
             if (insertError) throw insertError;
+
+            // Log New Booking
+            await logAction(
+                'NEW_BOOKING_REQUEST',
+                newBooking.id,
+                [
+                    `Customer: ${formData.customerName}`,
+                    `Car: ${language === 'ar' && car.name_ar ? car.name_ar : car.name}`,
+                    ...(selectedUnit ? [`Color: ${selectedUnit.color}`, `Plate: ${selectedUnit.plate_number}`] : []),
+                    `Status: pending`
+                ].join(' | ')
+            );
 
             // Send Telegram Notification
             try {
@@ -223,14 +441,13 @@ export default function BookingPage() {
                             endDate: formData.endDate,
                             pickupTime: formData.pickupTime,
                             branch: branchName,
-                            notes: formData.notes,
+                            notes: finalNotes,
                             days: calculateDays(formData.startDate, formData.endDate)
                         }
                     })
                 });
             } catch (notifyError) {
                 console.error("Failed to trigger notification:", notifyError);
-                // Don't fail the booking if notification fails
             }
 
             setSuccess(true);
@@ -463,50 +680,46 @@ export default function BookingPage() {
                                     </div>
                                 </div>
 
-                                {/* Booking Dates & Time */}
+                                {/* Booking Dates & Calendar */}
                                 <div className="luxury-card text-start">
                                     <h2 className="text-xl font-semibold text-luxury-white mb-4 flex items-center gap-2">
-                                        <Calendar className="h-5 w-5 text-gold" />
+                                        <CalendarIcon className="h-5 w-5 text-gold" />
                                         {t("booking.rentalPeriod")}
                                     </h2>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                                        <div>
-                                            <label htmlFor="startDate" className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                                {t("booking.pickupDate")} *
-                                            </label>
-                                            <input
-                                                type="date"
-                                                id="startDate"
-                                                min={today}
-                                                value={formData.startDate}
-                                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 ${formErrors.startDate ? "border-red-500" : "border-gold/20"
-                                                    }`}
-                                            />
-                                            {formErrors.startDate && (
-                                                <p className="text-red-400 text-sm mt-1">{formErrors.startDate}</p>
-                                            )}
-                                        </div>
+                                    <div className="bg-luxury-gray/50 rounded-lg p-4 border border-gold/10 flex flex-col items-center mb-6">
+                                        <style>{`
+                                            .rdp { --rdp-cell-size: 40px; --rdp-accent-color: #D4AF37; --rdp-background-color: #D4AF37; margin: 0; }
+                                            .rdp-day_selected:not([disabled]) { color: black; font-weight: bold; }
+                                            .rdp-button:hover:not([disabled]) { color: #D4AF37; }
+                                         `}</style>
+                                        <Calendar
+                                            mode="range"
+                                            selected={dateRange}
+                                            onSelect={handleDateSelect}
+                                            disabled={isDateDisabled}
+                                            numberOfMonths={1}
+                                            defaultMonth={new Date()}
+                                            className="rounded-md border border-white/10 bg-luxury-gray text-luxury-white"
+                                        />
 
-                                        <div>
-                                            <label htmlFor="endDate" className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                                {t("booking.returnDate")} *
-                                            </label>
-                                            <input
-                                                type="date"
-                                                id="endDate"
-                                                min={formData.startDate || today}
-                                                value={formData.endDate}
-                                                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                                className={`w-full px-4 py-3 bg-luxury-gray border rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 ${formErrors.endDate ? "border-red-500" : "border-gold/20"
-                                                    }`}
-                                            />
-                                            {formErrors.endDate && (
-                                                <p className="text-red-400 text-sm mt-1">{formErrors.endDate}</p>
-                                            )}
+                                        <div className="flex gap-4 mt-6 w-full">
+                                            <div className="flex-1">
+                                                <label className="text-xs text-luxury-white/50 block mb-1">{t("booking.pickupDate")}</label>
+                                                <div className="px-3 py-2 bg-black/40 rounded border border-white/10 text-luxury-white text-sm">
+                                                    {formData.startDate || "-"}
+                                                </div>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-xs text-luxury-white/50 block mb-1">{t("booking.returnDate")}</label>
+                                                <div className="px-3 py-2 bg-black/40 rounded border border-white/10 text-luxury-white text-sm">
+                                                    {formData.endDate || "-"}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                    {formErrors.startDate && <p className="text-red-400 text-sm mt-2">{formErrors.startDate}</p>}
+                                    {formErrors.endDate && <p className="text-red-400 text-sm mt-1">{formErrors.endDate}</p>}
 
                                     {/* Pickup Time */}
                                     <div>
@@ -526,6 +739,43 @@ export default function BookingPage() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Color Selection */}
+                                {availableUnits.length > 0 && (
+                                    <div className="mb-6 animate-fadeIn">
+                                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                                            {language === "ar" ? "اختر لون السيارة (اختياري)" : "Preferred Car Color (Optional)"}
+                                        </label>
+                                        <div className="flex flex-wrap gap-3">
+                                            {availableUnits.map((unit) => (
+                                                <button
+                                                    key={unit.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedUnit(unit.id === selectedUnit?.id ? null : unit)}
+                                                    className={`group relative p-1 rounded-full border-2 transition-all ${selectedUnit?.id === unit.id ? 'border-amber-500 scale-110' : 'border-transparent hover:border-gray-300'}`}
+                                                >
+                                                    <div
+                                                        className="w-8 h-8 rounded-full shadow-sm border border-gray-200"
+                                                        style={{ backgroundColor: unit.color?.toLowerCase() }}
+                                                        title={unit.color}
+                                                    />
+                                                    {selectedUnit?.id === unit.id && (
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <CheckCircle className="w-5 h-5 text-white drop-shadow-md" />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {selectedUnit && (
+                                            <p className="text-xs text-amber-600 mt-2 font-medium">
+                                                {language === "ar"
+                                                    ? `تم اختيار اللون: ${selectedUnit.color}`
+                                                    : `Selected Color: ${selectedUnit.color}`}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Additional Notes */}
                                 <div className="luxury-card text-start">

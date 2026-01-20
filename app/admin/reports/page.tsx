@@ -152,43 +152,58 @@ export default function AdminReportsPage() {
 
     async function fetchRentedCars() {
         try {
-            // Fetch cars that have status 'rented'
-            let query = supabase
-                .from("cars")
-                .select("*, category:categories(id, name, name_ar), car_branches!inner(branch_id)")
+            // 1. Fetch ALL Rented Inventory (Source of Truth for Dashboard Count)
+            // We fetch the inventory items that are marked as 'rented'
+            const { data: inventoryData, error: invError } = await supabase
+                .from("car_inventory")
+                .select("*, car:cars!inner(*, category:categories(id, name, name_ar))")
                 .eq("status", "rented");
 
-            query = await applyBranchFilter(query, 'car_branches.branch_id');
-            const { data: cars, error: carsError } = await query;
+            if (invError) throw invError;
 
-            if (carsError) throw carsError;
+            if (!inventoryData || inventoryData.length === 0) {
+                setRentedCars([]);
+                return;
+            }
 
-            // Get today's date in YYYY-MM-DD format (Local Time) to find associated bookings
-            const today = new Date().toLocaleDateString('en-CA');
+            // 2. Fetch associated confirmed bookings to get customer details
+            // We get all confirmed bookings for these inventory IDs
+            const inventoryIds = inventoryData.map(i => i.id);
+            const { data: bookings, error: bookingError } = await supabase
+                .from("bookings")
+                .select("*")
+                .in("inventory_id", inventoryIds)
+                .eq("status", "confirmed")
+                .order("created_at", { ascending: false });
 
-            // For each rented car, try to find its current confirmed booking to show details
-            const rentedCarsWithInfo = await Promise.all((cars || []).map(async (car) => {
-                const { data: booking } = await supabase
-                    .from("bookings")
-                    .select("customer_name, start_date, end_date, branch")
-                    .eq("car_id", car.id)
-                    .eq("status", "confirmed")
-                    .lte("start_date", today)
-                    .gte("end_date", today)
-                    .order("created_at", { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+            if (bookingError) throw bookingError;
+
+            // 3. Merge Data
+            const formattedCars = inventoryData.map(item => {
+                // Find the listing booking. 
+                // Since we might have multiple confirmed bookings (past/future?), we try to find one that overlaps NOW.
+                // If not found, imply take the latest created one.
+                const today = new Date().toISOString().split('T')[0];
+                const activeBooking = bookings?.find(b =>
+                    b.inventory_id === item.id &&
+                    b.start_date <= today &&
+                    b.end_date >= today
+                ) || bookings?.find(b => b.inventory_id === item.id); // Fallback to any confirmed booking for this item
 
                 return {
-                    ...car,
-                    booking_start: booking?.start_date,
-                    booking_end: booking?.end_date,
-                    customer_name: booking?.customer_name,
-                    branch: booking?.branch,
+                    id: item.id,
+                    plate_number: item.plate_number,
+                    color: item.color,
+                    booking_start: activeBooking?.start_date,
+                    booking_end: activeBooking?.end_date,
+                    customer_name: activeBooking?.customer_name || (language === "ar" ? "غير متوفر" : "N/A"),
+                    branch: activeBooking?.branch || '-',
+                    // car details
+                    ...item.car
                 };
-            }));
+            });
 
-            setRentedCars(rentedCarsWithInfo);
+            setRentedCars(formattedCars);
         } catch (error) {
             console.error("Error fetching rented cars:", error);
         }
@@ -592,11 +607,16 @@ export default function AdminReportsPage() {
                                             </span>
                                         </div>
                                         <p className="text-luxury-white/60 text-sm">{car.model} • {car.year}</p>
-                                        {car.category && (
-                                            <p className="text-orange-400 text-sm mt-1">
-                                                {language === "ar" && car.category?.name_ar ? car.category.name_ar : car.category?.name}
-                                            </p>
-                                        )}
+                                        <div className="flex justify-between items-center mt-2">
+                                            <span className="text-xs bg-luxury-black/40 px-2 py-1 rounded text-gold border border-gold/10 font-mono tracking-wider">
+                                                {car.plate_number}
+                                            </span>
+                                            {car.category && (
+                                                <p className="text-orange-400 text-sm">
+                                                    {language === "ar" && car.category?.name_ar ? car.category.name_ar : car.category?.name}
+                                                </p>
+                                            )}
+                                        </div>
                                         {/* Booking Info */}
                                         <div className="mt-3 pt-3 border-t border-orange-500/20 space-y-1">
                                             {car.customer_name && (

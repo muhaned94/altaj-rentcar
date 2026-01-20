@@ -40,7 +40,8 @@ export default function AdminCustomersPage() {
             let bookingsQuery = supabase
                 .from("bookings")
                 .select("*")
-                .order("created_at", { ascending: false });
+                .order("created_at", { ascending: false })
+                .range(0, 4999);
 
             // Apply branch filter for non-super_admin
             if (allowedBranchIds !== null && allowedBranchIds.length > 0) {
@@ -60,7 +61,8 @@ export default function AdminCustomersPage() {
             // 2. Fetch customer profiles (for blacklist status)
             const { data: profilesData, error: profilesError } = await supabase
                 .from("customer_profiles")
-                .select("*");
+                .select("*")
+                .range(0, 4999);
 
             // Allow initial load even if profiles table is empty/missing
             const profiles = profilesData || [];
@@ -68,17 +70,15 @@ export default function AdminCustomersPage() {
             // 3. Aggregate data
             const customerMap = new Map<string, Customer>();
 
+            // Process Bookings first (Verified data)
             bookingsData?.forEach((booking: Booking) => {
                 const phone = booking.customer_phone;
-                // Normalize phone if needed, currently assuming exact match
-
-                const existing = customerMap.get(phone);
                 const profile = profiles.find((p: any) => p.phone_number === phone);
+                const existing = customerMap.get(phone);
 
                 if (existing) {
                     existing.totalBookings += 1;
                     existing.totalSpent += booking.total_amount;
-                    // Keep most recent date since we sorted by created_at desc
                     if (new Date(booking.created_at) > new Date(existing.lastBooking)) {
                         existing.lastBooking = booking.created_at;
                     }
@@ -91,6 +91,22 @@ export default function AdminCustomersPage() {
                         lastBooking: booking.created_at,
                         isBlacklisted: profile?.is_blacklisted || false,
                         notes: profile?.notes
+                    });
+                }
+            });
+
+            // Process Profiles (Add customers with no active bookings)
+            profiles.forEach((profile: any) => {
+                const phone = profile.phone_number;
+                if (!customerMap.has(phone)) {
+                    customerMap.set(phone, {
+                        name: profile.full_name || (language === 'ar' ? 'زبون جديد' : 'New Customer'),
+                        phone: phone,
+                        totalBookings: profile.total_bookings || 0,
+                        totalSpent: profile.total_spent || 0,
+                        lastBooking: profile.last_booking || profile.created_at || new Date().toISOString(),
+                        isBlacklisted: profile.is_blacklisted || false,
+                        notes: profile.notes
                     });
                 }
             });

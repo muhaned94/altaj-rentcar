@@ -28,6 +28,7 @@ import {
     RefreshCw,
     Plus
 } from "lucide-react";
+import BookingDetailsModal from "../components/BookingDetailsModal";
 
 export default function AdminBookingsPage() {
     const { t, language, dir } = useLanguage();
@@ -38,6 +39,10 @@ export default function AdminBookingsPage() {
     const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     const [showCompleted, setShowCompleted] = useState(false);
     const [showConfirmed, setShowConfirmed] = useState(true);
+
+    // New State for Fleet Logic
+
+
 
     async function fetchBookings(silent = false) {
         try {
@@ -120,6 +125,11 @@ export default function AdminBookingsPage() {
     }, []);
 
 
+
+    // No longer need fetchAlternativeCars or the useEffect here as it's handled in the modal or we pass it down
+    // But wait, the modal fetches its own inventory now? Yes, I implemented fetchInventory inside the modal.
+    // So I can remove fetchAlternativeCars and the useEffect.
+
     async function updateStatus(bookingId: string, newStatus: string) {
         try {
             setUpdatingId(bookingId);
@@ -136,37 +146,86 @@ export default function AdminBookingsPage() {
             const booking = bookings.find(b => b.id === bookingId);
             const carName = booking ? (language === "ar" && booking.car?.name_ar ? booking.car.name_ar : booking.car?.name) : "Unknown Car";
 
+            // Determine Inventory ID and fetch Plate Number for Log
+            const invId = booking?.inventory_id;
+            let plateInfo = "";
+
+            if (invId) {
+                const { data: remoteInv } = await supabase.from("car_inventory").select("plate_number, color").eq("id", invId).single();
+                if (remoteInv) {
+                    plateInfo = ` | Plate: ${remoteInv.plate_number} | Color: ${remoteInv.color}`;
+                }
+            }
+
+            // Determine Log Action
+            let logType = 'UPDATE_STATUS';
+            const oldStatus = booking?.status;
+
+            if (newStatus === 'confirmed' && oldStatus === 'pending') {
+                logType = 'APPROVE_BOOKING';
+            } else if (newStatus === 'cancelled') {
+                logType = 'REJECT_BOOKING';
+            } else if (newStatus === 'completed') {
+                logType = 'COMPLETE_BOOKING';
+            } else if (oldStatus === 'confirmed' && newStatus === 'confirmed') {
+                logType = 'EDIT_BOOKING'; // Editing confirmed booking
+            } else if (oldStatus === 'completed' && newStatus === 'completed') {
+                logType = 'EDIT_BOOKING';
+            } else if (oldStatus === 'confirmed' && newStatus === 'pending') {
+                logType = 'EDIT_BOOKING'; // Reverting to pending
+            }
+
             // Log the action with rich details
             await logAction(
-                newStatus === 'confirmed' ? 'APPROVE_BOOKING' :
-                    newStatus === 'cancelled' ? 'REJECT_BOOKING' :
-                        newStatus === 'completed' ? 'COMPLETE_BOOKING' : 'UPDATE_STATUS',
+                logType,
                 bookingId,
                 booking
-                    ? `Status: ${newStatus} | Customer: ${booking.customer_name} | Car: ${carName} | Dates: ${new Date(booking.start_date).toLocaleDateString()} - ${new Date(booking.end_date).toLocaleDateString()}`
+                    ? `Status: ${newStatus} | Customer: ${booking.customer_name} | Car: ${carName}${plateInfo} | Dates: ${new Date(booking.start_date).toLocaleDateString()} - ${new Date(booking.end_date).toLocaleDateString()}`
                     : `Changed status to ${newStatus}`
             );
+
+            // 1.5 Update Car Assignment & Notes (if defined)
+            // Note: This function handles simple status updates (like quick actions).
+            // Complex edits are now done inside BookingDetailsModal.
+            const updates: any = { status: newStatus };
+
+            // Inventory Swap Logic - Only relevant if we are doing quick confirm from dashboard card without modal
+            // But Wait: The quick actions call updateStatus directly. 
+            // If I remove the state variables (targetInventoryId), I need to handle quick confirm logic differently or rely on auto-assign.
+
+            // Quick fix: For quick 'Confirm', we might just set status. But wait, we need to assign a car.
+            // The old quick action 'Accept' (updateStatus(id, 'confirmed')) would try to use targetInventoryId.
+            // BUT, now that state is gone. Quick actions might be risky if they don't assign a car.
+            // Actually, the improved modal should be the primary way to Confirm & Assign.
+            // Let's modify Quick Actions to OPEN the modal instead of direct confirm?
+            // Or keep simple actions for Cancel/Complete. 
+
+            // For now, I will simplify this function to just update status (and free/rent current car if applicable).
+            // Assigning specific inventory is best done via the Modal.
+
+            const { error: updateError } = await supabase
+                .from("bookings")
+                .update(updates)
+                .eq("id", bookingId);
+
+            if (updateError) throw updateError;
 
             // 2. Update Car Status Logic
             if (booking && booking.car_id) {
                 let newCarStatus = "";
-
                 if (newStatus === "confirmed") {
                     newCarStatus = "rented";
-                } else if (newStatus === "completed" || newStatus === "cancelled") {
+                } else if (newStatus === "completed" || newStatus === "cancelled" || newStatus === "pending") {
                     newCarStatus = "available";
                 }
 
-                if (newCarStatus) {
+                if (newCarStatus && booking.inventory_id) {
                     const { error: carError } = await supabase
-                        .from("cars")
+                        .from("car_inventory")
                         .update({ status: newCarStatus })
-                        .eq("id", booking.car_id);
+                        .eq("id", booking.inventory_id);
 
-                    if (carError) {
-                        console.error("Error updating car status:", carError);
-                        // Optional: Show a warning but don't fail the whole operation
-                    }
+                    if (carError) console.error("Error updating inventory status:", carError);
                 }
             }
 
@@ -312,19 +371,24 @@ ${isPending ? 'استلمنا طلب حجزك' : `تم تأكيد حجزك ${boo
                 </div>
             )}
 
-            {/* Quick Actions for Pending */}
+            {/* Quick Actions for Pending - Modified to Open Modal for 'Confirm' to ensure inventory selection */}
             {showQuickActions && booking.status === "pending" && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gold/20" onClick={(e) => e.stopPropagation()}>
                     <button
-                        onClick={() => updateStatus(booking.id, "confirmed")}
-                        disabled={updatingId === booking.id}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedBooking(booking);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
                     >
                         <Check className="h-4 w-4" />
                         {language === "ar" ? "قبول" : "Accept"}
                     </button>
                     <button
-                        onClick={() => updateStatus(booking.id, "cancelled")}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            updateStatus(booking.id, "cancelled");
+                        }}
                         disabled={updatingId === booking.id}
                         className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
                     >
@@ -521,244 +585,17 @@ ${isPending ? 'استلمنا طلب حجزك' : `تم تأكيد حجزك ${boo
                 )
             }
 
+
             {/* Booking Details Modal */}
-            {
-                selectedBooking && (
-                    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setSelectedBooking(null)}>
-                        <div
-                            className="bg-luxury-gray border border-gold/30 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()}
-                            dir={dir}
-                        >
-                            {/* Modal Header */}
-                            <div className="flex items-start justify-between mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-luxury-white">{t("admin.bookingDetails")}</h2>
-                                    <p className="text-luxury-white/60 text-sm mt-1">
-                                        {new Date(selectedBooking.created_at).toLocaleString(language === "ar" ? 'ar-IQ' : 'en-US')}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedBooking(null)}
-                                    className="p-2 text-luxury-white/60 hover:text-luxury-white hover:bg-gold/10 rounded-lg"
-                                >
-                                    <X className="h-5 w-5" />
-                                </button>
-                            </div>
-
-                            {/* Status Badge */}
-                            <div className="mb-6">
-                                <span className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusBadge(selectedBooking.status)}`}>
-                                    {getStatusLabel(selectedBooking.status)}
-                                </span>
-                            </div>
-
-                            {/* Customer Info */}
-                            <div className="luxury-card bg-luxury-black/50 mb-4">
-                                <h3 className="text-gold font-semibold mb-3 flex items-center gap-2">
-                                    <User className="h-5 w-5" />
-                                    {t("admin.customerInfo")}
-                                </h3>
-                                <div className="space-y-2">
-                                    <p className="text-luxury-white font-medium text-lg">{selectedBooking.customer_name}</p>
-                                    <p className="text-luxury-white/80 flex items-center gap-2" dir="ltr">
-                                        <Phone className="h-4 w-4 text-gold" />
-                                        {selectedBooking.customer_phone}
-                                    </p>
-                                    {selectedBooking.customer_email && (
-                                        <p className="text-luxury-white/80 flex items-center gap-2">
-                                            <Mail className="h-4 w-4 text-gold" />
-                                            {selectedBooking.customer_email}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Car Info */}
-                            <div className="luxury-card bg-luxury-black/50 mb-4">
-                                <h3 className="text-gold font-semibold mb-3 flex items-center gap-2">
-                                    <Car className="h-5 w-5" />
-                                    {t("admin.carInfo")}
-                                </h3>
-                                <p className="text-luxury-white font-medium text-lg">{getCarName(selectedBooking.car)}</p>
-                                {selectedBooking.car?.model && (
-                                    <p className="text-luxury-white/60 text-sm">{selectedBooking.car.model}</p>
-                                )}
-                                {selectedBooking.car?.plate_number && (
-                                    <p className="text-gold/80 text-sm mt-1 bg-black/20 px-2 py-1 rounded inline-block">
-                                        {language === "ar" ? "رقم اللوحة:" : "Plate:"} {selectedBooking.car.plate_number}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Booking Details */}
-                            <div className="luxury-card bg-luxury-black/50 mb-4">
-                                <h3 className="text-gold font-semibold mb-3 flex items-center gap-2">
-                                    <Calendar className="h-5 w-5" />
-                                    {t("admin.bookingDetailsTitle")}
-                                </h3>
-                                <div className="space-y-3">
-                                    <div className="flex justify-between">
-                                        <span className="text-luxury-white/60">{t("admin.pickupDate")}:</span>
-                                        <span className="text-luxury-white font-medium">{formatDate(selectedBooking.start_date)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-luxury-white/60">{t("admin.returnDate")}:</span>
-                                        <span className="text-luxury-white font-medium">{formatDate(selectedBooking.end_date)}</span>
-                                    </div>
-                                    {selectedBooking.pickup_time && (
-                                        <div className="flex justify-between">
-                                            <span className="text-luxury-white/60">{t("admin.pickupTime")}:</span>
-                                            <span className="text-luxury-white font-medium">{selectedBooking.pickup_time}</span>
-                                        </div>
-                                    )}
-                                    {selectedBooking.branch && (
-                                        <div className="flex justify-between">
-                                            <span className="text-luxury-white/60">{t("admin.branchLocation")}:</span>
-                                            <span className="text-luxury-white font-medium">{selectedBooking.branch}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Notes */}
-                            {selectedBooking.notes && (
-                                <div className="luxury-card bg-luxury-black/50 mb-4">
-                                    <h3 className="text-gold font-semibold mb-3 flex items-center gap-2">
-                                        <FileText className="h-5 w-5" />
-                                        {t("admin.notes")}
-                                    </h3>
-                                    <p className="text-luxury-white/80">{selectedBooking.notes}</p>
-                                </div>
-                            )}
-
-                            {/* Amount */}
-                            <div className="luxury-card bg-gold/10 border-gold/30 mb-6">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-luxury-white font-medium">{t("admin.totalAmount")}</span>
-                                    <span className="text-gold font-bold text-2xl">{formatCurrency(selectedBooking.total_amount, language)}</span>
-                                </div>
-                            </div>
-
-                            {/* WhatsApp Button in Modal */}
-                            {(selectedBooking.status === "confirmed" || selectedBooking.status === "pending") && (
-                                <button
-                                    onClick={() => openWhatsApp(selectedBooking)}
-                                    className="w-full flex items-center justify-center gap-2 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold mb-4"
-                                >
-                                    <Phone className="h-5 w-5" />
-                                    {selectedBooking.status === "pending" ? "إرسال واتساب (طلب مستمسكات)" : "إرسال واتساب (موافقة + مستمسكات)"}
-                                </button>
-                            )}
-
-                            {/* Quick Actions */}
-                            {selectedBooking.status === "pending" && (
-                                <div className="flex gap-3 mb-4">
-                                    <button
-                                        onClick={() => updateStatus(selectedBooking.id, "confirmed")}
-                                        disabled={updatingId === selectedBooking.id}
-                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 font-semibold"
-                                    >
-                                        <Check className="h-5 w-5" />
-                                        {language === "ar" ? "قبول الحجز" : "Accept Booking"}
-                                    </button>
-                                    <button
-                                        onClick={() => updateStatus(selectedBooking.id, "cancelled")}
-                                        disabled={updatingId === selectedBooking.id}
-                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 font-semibold"
-                                    >
-                                        <XCircle className="h-5 w-5" />
-                                        {language === "ar" ? "رفض" : "Reject"}
-                                    </button>
-                                </div>
-                            )}
-
-                            {selectedBooking.status === "confirmed" && (
-                                <button
-                                    onClick={() => updateStatus(selectedBooking.id, "completed")}
-                                    disabled={updatingId === selectedBooking.id}
-                                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 font-semibold mb-4"
-                                >
-                                    <Check className="h-5 w-5" />
-                                    {language === "ar" ? "إكمال الحجز" : "Mark as Completed"}
-                                </button>
-                            )}
-
-                            {/* National ID & Contract - For confirmed/completed bookings */}
-                            {(selectedBooking.status === "confirmed" || selectedBooking.status === "completed") && (
-                                <div className="luxury-card bg-amber-500/10 border-amber-500/30 mb-4">
-                                    <h3 className="text-amber-400 font-semibold mb-3">
-                                        {language === "ar" ? "عقد الإيجار" : "Rental Contract"}
-                                    </h3>
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-luxury-white/80 text-sm mb-2">
-                                                {language === "ar" ? "رقم البطاقة الوطنية" : "National ID"}
-                                            </label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={selectedBooking.national_id || ""}
-                                                    onChange={(e) => setSelectedBooking({ ...selectedBooking, national_id: e.target.value })}
-                                                    className="flex-1 px-4 py-2 bg-luxury-black border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50"
-                                                    placeholder={language === "ar" ? "أدخل رقم البطاقة" : "Enter ID number"}
-                                                    dir="ltr"
-                                                />
-                                                <button
-                                                    onClick={async () => {
-                                                        try {
-                                                            await supabase
-                                                                .from("bookings")
-                                                                .update({ national_id: selectedBooking.national_id })
-                                                                .eq("id", selectedBooking.id);
-                                                            setBookings(bookings.map(b =>
-                                                                b.id === selectedBooking.id ? { ...b, national_id: selectedBooking.national_id } : b
-                                                            ));
-                                                            alert(language === "ar" ? "تم الحفظ" : "Saved!");
-                                                        } catch (error) {
-                                                            alert(t("common.error"));
-                                                        }
-                                                    }}
-                                                    className="px-4 py-2 bg-gold text-luxury-black rounded-lg hover:bg-gold-light font-medium"
-                                                >
-                                                    {language === "ar" ? "حفظ" : "Save"}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <a
-                                            href={`/admin/bookings/contract/${selectedBooking.id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="w-full flex items-center justify-center gap-2 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-semibold"
-                                        >
-                                            <FileText className="h-5 w-5" />
-                                            {language === "ar" ? "طباعة العقد" : "Print Contract"}
-                                        </a>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Status Dropdown for other cases */}
-                            {(selectedBooking.status === "completed" || selectedBooking.status === "cancelled") && (
-                                <div>
-                                    <label className="block text-luxury-white/80 text-sm mb-2">{t("admin.updateStatus")}:</label>
-                                    <select
-                                        value={selectedBooking.status}
-                                        onChange={(e) => updateStatus(selectedBooking.id, e.target.value)}
-                                        disabled={updatingId === selectedBooking.id}
-                                        className="w-full px-4 py-3 bg-luxury-black border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 disabled:opacity-50"
-                                    >
-                                        <option value="pending">{t("admin.statusPending")}</option>
-                                        <option value="confirmed">{t("admin.statusConfirmed")}</option>
-                                        <option value="completed">{t("admin.statusCompleted")}</option>
-                                        <option value="cancelled">{t("admin.statusCancelled")}</option>
-                                    </select>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )
-            }
-        </div >
+            {selectedBooking && (
+                <BookingDetailsModal
+                    booking={selectedBooking}
+                    isOpen={!!selectedBooking}
+                    onClose={() => setSelectedBooking(null)}
+                    onUpdate={() => fetchBookings(true)}
+                />
+            )}
+        </div>
     );
 }
+
