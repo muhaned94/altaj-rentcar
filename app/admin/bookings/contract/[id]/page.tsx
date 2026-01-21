@@ -53,7 +53,7 @@ export default function ContractPage() {
         const start = new Date(booking.start_date);
         const end = new Date(booking.end_date);
         const diff = end.getTime() - start.getTime();
-        return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+        return Math.ceil(diff / (1000 * 60 * 60 * 24));
     }
 
     if (loading) {
@@ -262,6 +262,14 @@ export default function ContractPage() {
                                 <span className="text-xl font-extrabold text-black">Total / الإجمالي</span>
                                 <span className="text-2xl font-black text-black">{formatCurrency(booking.total_amount, language)}</span>
                             </div>
+                            {booking.discount_percentage && booking.discount_percentage > 0 && (
+                                <div className="mt-2 pt-2 border-t border-black/20 flex justify-between items-center text-sm">
+                                    <span className="text-black font-bold"> Discount ({booking.discount_percentage}%) / خصم</span>
+                                    <span className="font-bold text-black">
+                                        -{formatCurrency((booking.car?.daily_rate || 0) * calculateDays() * (booking.discount_percentage / 100), language)}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

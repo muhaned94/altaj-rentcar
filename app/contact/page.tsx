@@ -6,6 +6,7 @@ import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import { Mail, Phone, MapPin, Send, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { logAction } from "@/lib/audit";
 import { useLanguage } from "@/lib/language-context";
 
 export default function ContactPage() {
@@ -40,6 +41,13 @@ export default function ContactPage() {
                 ]);
 
             if (submitError) throw submitError;
+
+            // Log New Contact Message
+            await logAction(
+                'NEW_CONTACT_MESSAGE',
+                'unread',
+                `From: ${formData.name} (${formData.email})`
+            );
 
             setSuccess(true);
             setFormData({ name: "", email: "", phone: "", message: "" });

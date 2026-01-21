@@ -16,8 +16,8 @@ export async function logAction(action: string, resourceId?: string, details?: s
             });
 
         if (error) {
-            console.error("❌ Failed to write audit log:", error);
-            alert(`Audit Log Error: ${error.message}`); // Temporary alert to show user the error
+            console.error("❌ Failed to write audit log (RLS or Network):", error);
+            // Suppress alert for user - we don't want to block the flow if logging fails
         } else {
             console.log("✅ Audit log recorded successfully");
         }

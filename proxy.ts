@@ -34,7 +34,10 @@ export default async function proxy(request: NextRequest) {
     try {
         const { data, error } = await supabase.auth.getUser();
         if (error) {
-            console.error("Supabase auth error in middleware:", error);
+            // Ignore "AuthSessionMissingError" as it just means no session
+            if (error.name !== "AuthSessionMissingError" && error.message !== "Auth session missing!") {
+                console.error("Supabase auth error in middleware:", error);
+            }
         }
         user = data?.user;
     } catch (e) {

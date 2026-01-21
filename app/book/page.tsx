@@ -7,6 +7,7 @@ import Image from "next/image";
 import { supabase, getImageUrl } from "@/lib/supabase";
 import { Car } from "@/lib/types";
 import { formatCurrency, calculateDays, calculateTotalAmount } from "@/lib/utils";
+import { logAction } from "@/lib/audit";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import { useLanguage } from "@/lib/language-context";
@@ -245,6 +246,13 @@ export default function BookingPage() {
                 });
 
             if (insertError) throw insertError;
+
+            // Log New Booking
+            await logAction(
+                'NEW_BOOKING_REQUEST',
+                'pending', // Using 'pending' as resource ID or similar since we might not have ID returned unless we select
+                `Customer: ${formData.customerName} | Branch: ${branchName} | Total: ${totalAmount}`
+            );
 
             // Send Telegram Notification
             try {

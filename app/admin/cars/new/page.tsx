@@ -15,6 +15,7 @@ import {
     Trash2
 } from "lucide-react";
 import Link from "next/link";
+import { useLanguage } from "@/lib/language-context";
 
 interface Branch {
     id: string;
@@ -42,6 +43,7 @@ interface InventoryItem {
 }
 
 export default function NewCarPage() {
+    const { t, language, dir } = useLanguage();
     const router = useRouter();
     const [categories, setCategories] = useState<Category[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -246,21 +248,25 @@ export default function NewCarPage() {
                 href="/admin/cars"
                 className="inline-flex items-center gap-2 text-luxury-white/60 hover:text-gold transition-colors mb-6"
             >
-                <ArrowLeft className="h-5 w-5" />
-                Back to Cars
+                {language === "ar" ? <ArrowLeft className="h-5 w-5 rotate-180" /> : <ArrowLeft className="h-5 w-5" />}
+                {language === "ar" ? "العودة للسيارات" : "Back to Cars"}
             </Link>
 
-            <h1 className="text-2xl font-bold text-luxury-white mb-6">Add New Car</h1>
+            <h1 className="text-2xl font-bold text-luxury-white mb-6">
+                {language === "ar" ? "إضافة سيارة جديدة" : "Add New Car"}
+            </h1>
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Basic Information */}
                 <div className="luxury-card">
-                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Basic Information</h2>
+                    <h2 className="text-lg font-semibold text-luxury-white mb-4">
+                        {language === "ar" ? "المعلومات الأساسية" : "Basic Information"}
+                    </h2>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Car Name *
+                                {language === "ar" ? "اسم السيارة *" : "Car Name *"}
                             </label>
                             <input
                                 type="text"
@@ -275,7 +281,7 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Arabic Name
+                                {language === "ar" ? "الاسم بالعربية" : "Arabic Name"}
                             </label>
                             <input
                                 type="text"
@@ -289,7 +295,7 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Model *
+                                {language === "ar" ? "الموديل *" : "Model *"}
                             </label>
                             <input
                                 type="text"
@@ -304,7 +310,7 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Year *
+                                {language === "ar" ? "السنة *" : "Year *"}
                             </label>
                             <input
                                 type="number"
@@ -321,7 +327,7 @@ export default function NewCarPage() {
                         {/* Color Selection */}
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Default Color
+                                {language === "ar" ? "اللون الافتراضي" : "Default Color"}
                             </label>
                             <select
                                 value={formData.colorKey}
@@ -350,13 +356,15 @@ export default function NewCarPage() {
                 {/* Fleet Inventory Management */}
                 <div className="luxury-card">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold text-luxury-white">Fleet Inventory (Units)</h2>
+                        <h2 className="text-lg font-semibold text-luxury-white">
+                            {language === "ar" ? "المخزون (الوحدات)" : "Fleet Inventory (Units)"}
+                        </h2>
                         <button
                             type="button"
                             onClick={addInventoryItem}
                             className="flex items-center gap-2 text-sm text-gold hover:text-gold-light"
                         >
-                            <Plus className="h-4 w-4" /> Add Unit
+                            <Plus className="h-4 w-4" /> {language === "ar" ? "إضافة وحدة" : "Add Unit"}
                         </button>
                     </div>
 
@@ -364,9 +372,9 @@ export default function NewCarPage() {
                         <table className="w-full text-left text-sm text-luxury-white">
                             <thead className="text-luxury-white/60 uppercase bg-luxury-black/30">
                                 <tr>
-                                    <th className="px-4 py-3">Plate Number *</th>
-                                    <th className="px-4 py-3">Color</th>
-                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3 text-start">{language === "ar" ? "رقم اللوحة *" : "Plate Number *"}</th>
+                                    <th className="px-4 py-3 text-start">{language === "ar" ? "اللون" : "Color"}</th>
+                                    <th className="px-4 py-3 text-start">{language === "ar" ? "الحالة" : "Status"}</th>
                                     <th className="px-4 py-3 w-10"></th>
                                 </tr>
                             </thead>
@@ -379,7 +387,7 @@ export default function NewCarPage() {
                                                 value={item.plate_number}
                                                 onChange={(e) => updateInventoryItem(idx, "plate_number", e.target.value)}
                                                 className="w-full bg-transparent border border-gold/20 rounded px-2 py-1 text-luxury-white focus:border-gold/50 outline-none"
-                                                placeholder="Plate #"
+                                                placeholder={language === "ar" ? "رقم اللوحة" : "Plate #"}
                                             />
                                         </td>
                                         <td className="px-4 py-2">
@@ -430,13 +438,15 @@ export default function NewCarPage() {
 
                 {/* Location & Identification */}
                 <div className="luxury-card">
-                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Availability</h2>
+                    <h2 className="text-lg font-semibold text-luxury-white mb-4">
+                        {language === "ar" ? "التوفر" : "Availability"}
+                    </h2>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Branches Checkboxes */}
                         <div className="lg:col-span-2">
                             <label className="block text-sm font-medium text-luxury-white/80 mb-3">
-                                Available Branches *
+                                {language === "ar" ? "الفروع المتاحة *" : "Available Branches *"}
                             </label>
                             <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-luxury-gray/50 rounded-lg border ${errors.branches ? "border-red-500" : "border-gold/10"}`}>
                                 {branches.map((branch) => (
@@ -468,12 +478,14 @@ export default function NewCarPage() {
 
                 {/* Pricing & Status */}
                 <div className="luxury-card">
-                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Pricing & Other</h2>
+                    <h2 className="text-lg font-semibold text-luxury-white mb-4">
+                        {language === "ar" ? "التسعير وأخرى" : "Pricing & Other"}
+                    </h2>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Daily Rate (SAR) *
+                                {language === "ar" ? "السعر اليومي (د.ع) *" : "Daily Rate (SAR) *"}
                             </label>
                             <input
                                 type="number"
@@ -490,14 +502,14 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Category
+                                {language === "ar" ? "الفئة" : "Category"}
                             </label>
                             <select
                                 value={formData.categoryId}
                                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                                 className="w-full px-4 py-3 bg-luxury-gray border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50"
                             >
-                                <option value="">Select Category</option>
+                                <option value="">{language === "ar" ? "اختر الفئة" : "Select Category"}</option>
                                 {categories.map((cat) => (
                                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                                 ))}
@@ -506,7 +518,7 @@ export default function NewCarPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Model Status
+                                {language === "ar" ? "حالة الموديل" : "Model Status"}
                             </label>
                             <select
                                 value={formData.status}
@@ -523,13 +535,15 @@ export default function NewCarPage() {
 
                 {/* Features */}
                 <div className="luxury-card">
-                    <h2 className="text-lg font-semibold text-luxury-white mb-4">Features</h2>
+                    <h2 className="text-lg font-semibold text-luxury-white mb-4">
+                        {language === "ar" ? "المميزات" : "Features"}
+                    </h2>
                     <textarea
                         value={formData.features}
                         onChange={(e) => setFormData({ ...formData, features: e.target.value })}
                         className="w-full px-4 py-3 bg-luxury-gray border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 resize-none"
                         rows={3}
-                        placeholder="Enter features separated by commas (e.g. Leather Seats, Sunroof, GPS Navigation)"
+                        placeholder={language === "ar" ? "أدخل المميزات مفصولة بفواصل (مثال: مقاعد جلد، فتحة سقف)" : "Enter features separated by commas (e.g. Leather Seats, Sunroof, GPS Navigation)"}
                     />
                 </div>
 
@@ -585,12 +599,14 @@ export default function NewCarPage() {
                     {loading ? (
                         <>
                             <Loader2 className="h-5 w-5 animate-spin" />
-                            {uploading ? "Uploading Images..." : "Saving..."}
+                            {uploading
+                                ? (language === "ar" ? "جاري رفع الصور..." : "Uploading Images...")
+                                : (language === "ar" ? "جاري الحفظ..." : "Saving...")}
                         </>
                     ) : (
                         <>
                             <Save className="h-5 w-5" />
-                            Save Car
+                            {language === "ar" ? "حفظ السيارة" : "Save Car"}
                         </>
                     )}
                 </button>

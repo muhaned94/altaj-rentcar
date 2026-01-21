@@ -63,6 +63,7 @@ export interface Booking {
     updated_at: string;
     car?: Car;
     booking_number?: number;
+    discount_percentage?: number;
 }
 
 export interface ContactMessage {

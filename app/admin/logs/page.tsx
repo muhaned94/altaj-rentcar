@@ -124,7 +124,7 @@ export default function LogsPage() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full text-start border-collapse" dir={language === 'ar' ? 'rtl' : 'ltr'}>
                             <thead>
                                 <tr className="border-b border-gold/10 bg-luxury-black/20 text-xs uppercase text-luxury-white/60">
                                     <th className="p-4 w-32">{language === "ar" ? "الوقت" : "Time"}</th>
@@ -249,12 +249,46 @@ export default function LogsPage() {
                                                 {/* Details */}
                                                 <td className="p-4 text-luxury-white/70 text-xs align-top">
                                                     <div className="whitespace-pre-wrap">
+                                                        {parts ? (
+                                                            <div className="space-y-1">
+                                                                {Object.entries(parts).map(([key, value]) => {
+                                                                    // Skip some internal keys if visual representation handles them (like color, car, plate which are handled in previous column)
+                                                                    if (['car', 'plate', 'color', 'status'].includes(key)) return null;
+
+                                                                    // Translation Map for Keys
+                                                                    const keyMap: Record<string, string> = {
+                                                                        'customer': 'الزبون',
+                                                                        'branch': 'الفرع',
+                                                                        'total': 'المجموع',
+                                                                        'from': 'من',
+                                                                        'email': 'البريد',
+                                                                        'phone': 'الهاتف',
+                                                                        'message': 'الرسالة'
+                                                                    };
+
+                                                                    const displayKey = language === 'ar' ? (keyMap[key] || key) : key.charAt(0).toUpperCase() + key.slice(1);
+                                                                    const displayValue = (value as string); // Add specific value translation if needed
+
+                                                                    return (
+                                                                        <div key={key}>
+                                                                            <span className="text-luxury-white/40">{displayKey}:</span> <span className="text-luxury-white/80">{displayValue}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+
+                                                                {/* Helper to show status if it exists in parts but we skipped it above, 
+                                                                    conceptually we might want to just show the status badge and not list it as text, 
+                                                                    but existing code used it for badge. Let's keep the badge logic below intact. */}
+                                                            </div>
+                                                        ) : null}
+
                                                         {parts && parts['status'] ? (
                                                             <span className={`inline-block px-2 py-1 rounded border mb-1 ${getStatusColor(parts['status'])}`}>
                                                                 {displayStatus}
                                                             </span>
                                                         ) : (
-                                                            <span>{displayStatus}</span>
+                                                            /* Fallback for non-parsed details */
+                                                            !parts && <span>{displayStatus}</span>
                                                         )}
                                                         {/* Show diff changes if any */}
                                                         {log.details.includes("->") && (

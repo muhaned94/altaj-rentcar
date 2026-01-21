@@ -220,9 +220,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     // Check if current page is accessible
     if (!employeeLoading && employee) {
         // Find the matching rule for current path
-        const matchingPath = Object.keys(pageAccessRules).find(path =>
-            pathname === path || pathname.startsWith(path + '/')
-        );
+        // CRITICAL: We must find the LONGEST match to avoid /admin overriding /admin/users
+        const matchingPath = Object.keys(pageAccessRules)
+            .filter(path => pathname === path || pathname.startsWith(path + '/'))
+            .sort((a, b) => b.length - a.length)[0]; // Sort by length desc, take first
 
         if (matchingPath && !pageAccessRules[matchingPath].includes(employee.role)) {
             return (

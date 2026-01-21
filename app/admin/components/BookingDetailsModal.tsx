@@ -49,6 +49,7 @@ export default function BookingDetailsModal({
     const [adminNote, setAdminNote] = useState("");
     const [nationalId, setNationalId] = useState(booking.national_id || "");
     const [totalAmount, setTotalAmount] = useState(booking.total_amount);
+    const [discountPercentage, setDiscountPercentage] = useState(booking.discount_percentage || 0);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
 
     useEffect(() => {
@@ -60,9 +61,12 @@ export default function BookingDetailsModal({
             setEndDate(booking.end_date);
             setPickupTime(booking.pickup_time || "");
             setBranch(booking.branch || "");
+            setPickupTime(booking.pickup_time || "");
+            setBranch(booking.branch || "");
             setAdminNote("");
             setNationalId(booking.national_id || "");
             setTotalAmount(booking.total_amount);
+            setDiscountPercentage(booking.discount_percentage || 0); // Initialize discount
             setIsEditMode(false);
 
             fetchInventory();
@@ -70,19 +74,22 @@ export default function BookingDetailsModal({
     }, [isOpen, booking]);
 
     // Recalculate price on date change
+
     useEffect(() => {
         if (startDate && endDate && booking.car?.daily_rate) {
             const start = new Date(startDate);
             const end = new Date(endDate);
             const diffTime = end.getTime() - start.getTime();
-            // Inclusive days calculation
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            // Inclusive days calculation -> NOW EXCLUSIVE of return day
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if (diffDays > 0) {
-                setTotalAmount(diffDays * booking.car.daily_rate);
+                const subTotal = diffDays * booking.car.daily_rate;
+                const discount = subTotal * ((discountPercentage || 0) / 100);
+                setTotalAmount(subTotal - discount);
             }
         }
-    }, [startDate, endDate, booking.car]);
+    }, [startDate, endDate, booking.car, discountPercentage]);
 
     async function fetchInventory() {
         if (!booking.car_id) return;
@@ -137,7 +144,8 @@ export default function BookingDetailsModal({
                 pickup_time: pickupTime || null,
                 branch: branch, // Keep branch as string, assuming DB column is text
                 national_id: nationalId || null,
-                total_amount: totalAmount
+                total_amount: totalAmount,
+                discount_percentage: discountPercentage,
             };
 
             // Inventory Logic
@@ -468,9 +476,23 @@ export default function BookingDetailsModal({
                                 <label className="block text-xs text-luxury-white/60 mb-1">{language === "ar" ? "السعر الكلي (تحديث تلقائي)" : "Total Price (Auto-update)"}</label>
                                 <div className="w-full bg-luxury-black/50 border border-gold/20 rounded px-3 py-2 text-gold font-bold text-sm flex items-center justify-between">
                                     <span>{formatCurrency(totalAmount)}</span>
-                                    {booking.car?.daily_rate && <span className="text-xs text-green-500">Daily: {formatCurrency(booking.car.daily_rate)}</span>}
+                                    {discountPercentage > 0 && <span className="text-xs text-red-500">-{discountPercentage}%</span>}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Discount */}
+                        <div>
+                            <label className="block text-xs text-luxury-white/60 mb-1">{language === "ar" ? "نسبة الخصم (%)" : "Discount Percentage (%)"}</label>
+                            <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={discountPercentage}
+                                onChange={(e) => setDiscountPercentage(Number(e.target.value))}
+                                className="w-full bg-luxury-black border border-gold/20 rounded px-3 py-2 text-luxury-white focus:border-gold"
+                                placeholder="0"
+                            />
                         </div>
 
                         {/* Admin Note */}

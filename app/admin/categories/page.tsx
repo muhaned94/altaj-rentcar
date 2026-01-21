@@ -12,8 +12,10 @@ import {
     Loader2,
     Folder
 } from "lucide-react";
+import { useLanguage } from "@/lib/language-context";
 
 export default function AdminCategoriesPage() {
+    const { t, language, dir } = useLanguage();
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -141,9 +143,11 @@ export default function AdminCategoriesPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-luxury-white">Categories</h1>
+                    <h1 className="text-2xl font-bold text-luxury-white">
+                        {language === "ar" ? "الفئات" : "Categories"}
+                    </h1>
                     <p className="text-luxury-white/60 mt-1">
-                        Organize your vehicles by type
+                        {language === "ar" ? "تنظيم السيارات حسب النوع" : "Organize your vehicles by type"}
                     </p>
                 </div>
                 {!showForm && (
@@ -152,7 +156,7 @@ export default function AdminCategoriesPage() {
                         className="btn-gold flex items-center gap-2 w-fit"
                     >
                         <Plus className="h-5 w-5" />
-                        Add Category
+                        {language === "ar" ? "إضافة فئة" : "Add Category"}
                     </button>
                 )}
             </div>
@@ -162,7 +166,9 @@ export default function AdminCategoriesPage() {
                 <div className="luxury-card">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-semibold text-luxury-white">
-                            {editingId ? "Edit Category" : "New Category"}
+                            {editingId
+                                ? (language === "ar" ? "تعديل فئة" : "Edit Category")
+                                : (language === "ar" ? "فئة جديدة" : "New Category")}
                         </h2>
                         <button
                             onClick={resetForm}
@@ -175,7 +181,7 @@ export default function AdminCategoriesPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Name (English) *
+                                {language === "ar" ? "الاسم (إنجليزي) *" : "Name (English) *"}
                             </label>
                             <input
                                 type="text"
@@ -187,7 +193,7 @@ export default function AdminCategoriesPage() {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                                Name (Arabic)
+                                {language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}
                             </label>
                             <input
                                 type="text"
@@ -202,14 +208,14 @@ export default function AdminCategoriesPage() {
 
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-luxury-white/80 mb-2">
-                            Description
+                            {language === "ar" ? "الوصف" : "Description"}
                         </label>
                         <textarea
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                             className="w-full px-4 py-3 bg-luxury-gray border border-gold/20 rounded-lg text-luxury-white focus:outline-none focus:border-gold/50 resize-none"
                             rows={2}
-                            placeholder="Brief description of this category..."
+                            placeholder={language === "ar" ? "وصف مختصر..." : "Brief description of this category..."}
                         />
                     </div>
 
@@ -224,13 +230,15 @@ export default function AdminCategoriesPage() {
                             ) : (
                                 <Save className="h-4 w-4" />
                             )}
-                            {editingId ? "Update" : "Save"}
+                            {editingId
+                                ? (language === "ar" ? "تحديث" : "Update")
+                                : (language === "ar" ? "حفظ" : "Save")}
                         </button>
                         <button
                             onClick={resetForm}
                             className="px-6 py-3 border border-gold/30 rounded-lg text-luxury-white hover:bg-gold/10"
                         >
-                            Cancel
+                            {language === "ar" ? "إلغاء" : "Cancel"}
                         </button>
                     </div>
                 </div>
@@ -240,7 +248,7 @@ export default function AdminCategoriesPage() {
             {categories.length === 0 ? (
                 <div className="luxury-card text-center py-12">
                     <Folder className="h-12 w-12 text-gold/50 mx-auto mb-4" />
-                    <p className="text-luxury-white/60">No categories yet.</p>
+                    <p className="text-luxury-white/60">{language === "ar" ? "لا توجد فئات بعد." : "No categories yet."}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

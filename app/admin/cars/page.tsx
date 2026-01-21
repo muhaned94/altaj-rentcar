@@ -160,14 +160,18 @@ export default function AdminCarsPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-luxury-white">Manage Cars</h1>
+                    <h1 className="text-2xl font-bold text-luxury-white">
+                        {language === "ar" ? "إدارة السيارات" : "Manage Cars"}
+                    </h1>
                     <p className="text-luxury-white/60 mt-1">
-                        {cars.length} vehicles in your fleet
+                        {language === "ar"
+                            ? `${cars.length} سيارة في أسطولك`
+                            : `${cars.length} vehicles in your fleet`}
                     </p>
                 </div>
                 <Link href="/admin/cars/new" className="btn-gold flex items-center gap-2 w-fit">
                     <Plus className="h-5 w-5" />
-                    Add New Car
+                    {language === "ar" ? "إضافة سيارة جديدة" : "Add New Car"}
                 </Link>
             </div>
 
@@ -176,7 +180,7 @@ export default function AdminCarsPage() {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gold" />
                 <input
                     type="text"
-                    placeholder="Search cars..."
+                    placeholder={language === "ar" ? "بحث عن سيارة..." : "Search cars..."}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-luxury-gray border border-gold/20 rounded-lg text-luxury-white placeholder-luxury-white/40 focus:outline-none focus:border-gold/50"
@@ -188,12 +192,14 @@ export default function AdminCarsPage() {
                 <div className="luxury-card text-center py-12">
                     <CarIcon className="h-12 w-12 text-gold/50 mx-auto mb-4" />
                     <p className="text-luxury-white/60">
-                        {searchQuery ? "No cars match your search." : "No cars yet. Add your first vehicle!"}
+                        {searchQuery
+                            ? (language === "ar" ? "لا توجد نتائج بحث." : "No cars match your search.")
+                            : (language === "ar" ? "لا توجد سيارات. أضف سيارتك الأولى!" : "No cars yet. Add your first vehicle!")}
                     </p>
                     {!searchQuery && (
                         <Link href="/admin/cars/new" className="btn-gold inline-flex items-center gap-2 mt-4">
                             <Plus className="h-5 w-5" />
-                            Add New Car
+                            {language === "ar" ? "إضافة سيارة جديدة" : "Add New Car"}
                         </Link>
                     )}
                 </div>
@@ -202,22 +208,22 @@ export default function AdminCarsPage() {
                     {/* Desktop Table */}
                     <div className="hidden md:block luxury-card overflow-hidden p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full">
+                            <table className="w-full text-right" dir={language === "ar" ? "rtl" : "ltr"}>
                                 <thead>
                                     <tr className="border-b border-gold/20 bg-luxury-gray/50">
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Car</th>
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Plate</th>
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Category</th>
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Year</th>
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Daily Rate</th>
-                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4">Status</th>
-                                        <th className="text-right text-luxury-white/60 text-sm font-medium p-4">Actions</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "السيارة" : "Car"}</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "اللوحة" : "Plate"}</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "الفئة" : "Category"}</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "السنة" : "Year"}</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "السعر اليومي" : "Daily Rate"}</th>
+                                        <th className="text-left text-luxury-white/60 text-sm font-medium p-4 text-start">{language === "ar" ? "الحالة" : "Status"}</th>
+                                        <th className="text-right text-luxury-white/60 text-sm font-medium p-4 text-end">{language === "ar" ? "إجراءات" : "Actions"}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredCars.map((car) => (
                                         <tr key={car.id} className="border-b border-gold/10 hover:bg-gold/5">
-                                            <td className="p-4">
+                                            <td className="p-4 text-start">
                                                 <div className="flex items-center gap-3">
                                                     <div className="relative w-16 h-12 rounded overflow-hidden bg-luxury-gray">
                                                         <Image
@@ -323,14 +329,16 @@ export default function AdminCarsPage() {
                                         href={`/admin/cars/${car.id}/edit`}
                                         className="flex-1 py-2 text-center text-gold border border-gold/30 rounded-lg hover:bg-gold/10 transition-colors"
                                     >
-                                        Edit
+                                        {language === "ar" ? "تعديل" : "Edit"}
                                     </Link>
                                     <button
                                         onClick={() => handleDelete(car)}
                                         disabled={deleting === car.id}
                                         className="flex-1 py-2 text-center text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
                                     >
-                                        {deleting === car.id ? "Deleting..." : "Delete"}
+                                        {deleting === car.id
+                                            ? (language === "ar" ? "جاري الحذف..." : "Deleting...")
+                                            : (language === "ar" ? "حذف" : "Delete")}
                                     </button>
                                 </div>
                             </div>

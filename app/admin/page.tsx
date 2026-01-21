@@ -48,6 +48,21 @@ interface RecentBooking {
     car: { name: string; name_ar?: string } | null;
 }
 
+interface RentedCar {
+    id: string;
+    customer_name: string;
+    start_date: string;
+    end_date: string;
+    total_amount: number;
+    status: string;
+    branch?: string;
+    car: {
+        name: string;
+        name_ar?: string;
+        plate_number?: string;
+    } | null;
+}
+
 export default function AdminDashboard() {
     const { t, language, dir } = useLanguage();
     const [stats, setStats] = useState<DashboardStats>({
@@ -64,6 +79,7 @@ export default function AdminDashboard() {
         totalCategories: 0,
     });
     const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
+    const [rentedCarsList, setRentedCarsList] = useState<RentedCar[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -173,6 +189,16 @@ export default function AdminDashboard() {
                 .order("created_at", { ascending: false })
                 .limit(5), 'branch_id'));
 
+            // Fetch currently rented cars (Active Confirmed Bookings)
+            // Logic: Status is confirmed. We don't filter by date here assuming 'confirmed' means active or upcoming. 
+            // Better to show all confirmed, or confirmed + not completed.
+            // Let's stick to "confirmed" as "rented" based on typical flow.
+            const { data: activeRentals } = await safeQuery(() => applyBranchFilter(supabase
+                .from("bookings")
+                .select("id, customer_name, start_date, end_date, total_amount, status, branch, branch_id, car:cars(name, name_ar, plate_number)")
+                .eq("status", "confirmed")
+                .order("end_date", { ascending: true }), 'branch_id')); // Show soonest return first
+
             setStats({
                 totalCars: totalCars || 0,
                 availableCars: availableCars || 0,
@@ -188,6 +214,7 @@ export default function AdminDashboard() {
             });
 
             setRecentBookings((bookings as unknown as RecentBooking[]) || []);
+            setRentedCarsList((activeRentals as unknown as RentedCar[]) || []);
         } catch (error) {
             console.error("Dashboard data fetch exception:", error);
         } finally {
@@ -456,27 +483,89 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Link href="/admin/cars/new" className="luxury-card hover:border-gold/50 group text-center">
-                    <Car className="h-8 w-8 text-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                    <h3 className="text-luxury-white font-medium">{t("admin.addNewCar")}</h3>
-                </Link>
+            {/* Currently Rented Cars */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold text-luxury-white">
+                        {language === "ar" ? "السيارات المستأجرة حالياً" : "Currently Rented Cars"}
+                    </h2>
+                    <Link
+                        href="/admin/bookings?status=confirmed"
+                        className="text-gold hover:text-gold-light text-sm flex items-center gap-1"
+                    >
+                        {t("admin.viewAll")} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </div>
 
-                <Link href="/admin/bookings" className="luxury-card hover:border-gold/50 group text-center">
-                    <Calendar className="h-8 w-8 text-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                    <h3 className="text-luxury-white font-medium">{t("admin.manageBookings")}</h3>
-                </Link>
+                {rentedCarsList.length === 0 ? (
+                    <div className="luxury-card text-center py-12">
+                        <Car className="h-12 w-12 text-luxury-white/20 mx-auto mb-3" />
+                        <p className="text-luxury-white/60">
+                            {language === "ar" ? "لا يوجد سيارات مستأجرة حالياً" : "No currently rented cars"}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {rentedCarsList.map((booking) => {
+                            const isOverdue = new Date(booking.end_date) < new Date() && booking.status !== 'completed';
+                            return (
+                                <div key={booking.id} className={`luxury-card p-4 group hover:border-gold/50 transition-all ${isOverdue ? 'border-red-500/50 bg-red-500/5' : ''}`}>
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="p-2 bg-luxury-black/40 rounded-lg">
+                                            <Car className="h-6 w-6 text-gold" />
+                                        </div>
+                                        {isOverdue && (
+                                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-500 text-white animate-pulse">
+                                                {language === "ar" ? "متأخرة" : "Overdue"}
+                                            </span>
+                                        )}
+                                    </div>
 
-                <Link href="/admin/branches" className="luxury-card hover:border-gold/50 group text-center">
-                    <MapPin className="h-8 w-8 text-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                    <h3 className="text-luxury-white font-medium">{t("admin.branches")}</h3>
-                </Link>
+                                    <h3 className="text-luxury-white font-bold text-lg mb-1 truncate" title={language === "ar" && booking.car?.name_ar ? booking.car.name_ar : booking.car?.name}>
+                                        {language === "ar" && booking.car?.name_ar ? booking.car.name_ar : booking.car?.name || "Unknown Car"}
+                                    </h3>
 
-                <Link href="/admin/reports" className="luxury-card hover:border-gold/50 group text-center">
-                    <BarChart3 className="h-8 w-8 text-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                    <h3 className="text-luxury-white font-medium">{language === "ar" ? "التقارير" : "Reports"}</h3>
-                </Link>
+                                    {booking.car?.plate_number && (
+                                        <p className="text-luxury-white/40 text-xs mb-3 font-mono">
+                                            {booking.car.plate_number}
+                                        </p>
+                                    )}
+
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex items-center gap-2 text-luxury-white/70">
+                                            <Users className="h-3.5 w-3.5 text-gold/70" />
+                                            <span className="truncate">{booking.customer_name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-luxury-white/70">
+                                            <Calendar className="h-3.5 w-3.5 text-gold/70" />
+                                            <span className={isOverdue ? "text-red-400 font-bold" : ""}>
+                                                {new Date(booking.end_date).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                                            </span>
+                                        </div>
+                                        {booking.branch && (
+                                            <div className="flex items-center gap-2 text-luxury-white/70">
+                                                <MapPin className="h-3.5 w-3.5 text-gold/70" />
+                                                <span className="truncate">{booking.branch}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-4 pt-3 border-t border-gold/10 flex justify-between items-center">
+                                        <span className="text-gold font-bold">
+                                            {formatCurrency(booking.total_amount, language)}
+                                        </span>
+                                        <Link
+                                            href={`/admin/bookings/contract/${booking.id}`}
+                                            className="text-xs bg-gold/10 hover:bg-gold/20 text-gold px-2 py-1 rounded transition-colors"
+                                        >
+                                            {language === "ar" ? "العقد" : "Contract"}
+                                        </Link>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

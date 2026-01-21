@@ -287,11 +287,17 @@ export default function CalendarPage() {
         const effectiveStart = bookingStart < monthStart ? monthStart : bookingStart;
         const effectiveEnd = bookingEnd > monthEnd ? monthEnd : bookingEnd;
 
-        // Duration + 1 because if start=end it's 1 day
-        const durationDays = Math.ceil((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        // Duration calculation aligned with pricing (exclusive of return day)
+        // If start=Jan 1, end=Jan 2, diff=1 day. Visual width = 1 day column.
+        const diffDays = Math.ceil((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24));
+        // Ensure at least 1 day visual min (if start=end?) Although start=end is 0 days, maybe min 1?
+        // But logic says Jan 1 - Jan 2 is 1 day.
+        // If Jan 1 - Jan 1, that's 0 days? Booking usually has start != end or at least 1 hour?
+        // Let's assume min 1 for visual if diff is 0, or just use diff.
+        const durationDays = Math.max(diffDays, 1);
 
         return {
-            left: `${startIndex * dayWidth}px`,
+            offset: `${startIndex * dayWidth}px`,
             width: `${durationDays * dayWidth}px`
         };
     };
@@ -320,11 +326,11 @@ export default function CalendarPage() {
                     <div className="flex items-center gap-4 flex-wrap">
                         {/* Branch Filter */}
                         <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-luxury-white/40" />
+                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-luxury-white/40 rtl:left-auto rtl:right-3" />
                             <select
                                 value={selectedBranchId}
                                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                                className="bg-luxury-black/50 border border-gold/10 rounded-lg pl-9 pr-8 py-2 text-sm text-luxury-white focus:border-gold/50 focus:outline-none appearance-none cursor-pointer min-w-[150px]"
+                                className="bg-luxury-black/50 border border-gold/10 rounded-lg pl-9 pr-8 rtl:pr-9 rtl:pl-8 py-2 text-sm text-luxury-white focus:border-gold/50 focus:outline-none appearance-none cursor-pointer min-w-[150px]"
                             >
                                 <option value="">{language === "ar" ? "كل الفروع" : "All Branches"}</option>
                                 {branches.map(b => (
@@ -337,13 +343,13 @@ export default function CalendarPage() {
 
                         {/* Search */}
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-luxury-white/40" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-luxury-white/40 rtl:left-auto rtl:right-3" />
                             <input
                                 type="text"
                                 placeholder={language === "ar" ? "بحث عن سيارة..." : "Search cars..."}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="bg-luxury-black/50 border border-gold/10 rounded-lg pl-9 pr-4 py-2 text-sm text-luxury-white focus:border-gold/50 focus:outline-none w-48"
+                                className="bg-luxury-black/50 border border-gold/10 rounded-lg pl-9 pr-4 rtl:pr-9 rtl:pl-4 py-2 text-sm text-luxury-white focus:border-gold/50 focus:outline-none w-48"
                             />
                         </div>
 
@@ -379,14 +385,14 @@ export default function CalendarPage() {
                         <div className="inline-block min-w-full">
                             {/* Header Row (Days) */}
                             <div className="flex sticky top-0 z-20 bg-luxury-gray border-b border-gold/20">
-                                <div className="sticky left-0 z-30 w-48 md:w-64 bg-luxury-gray border-r border-gold/20 p-3 font-bold text-luxury-white flex-shrink-0">
+                                <div className={`sticky ${dir === 'rtl' ? 'right-0 border-l' : 'left-0 border-r'} z-30 w-48 md:w-64 bg-luxury-gray border-gold/20 p-3 font-bold text-luxury-white flex-shrink-0`}>
                                     {language === "ar" ? "الوحدة (اللوحة)" : "Unit (Plate)"}
                                 </div>
                                 <div className="flex">
                                     {daysInMonth.map((day) => (
                                         <div
                                             key={day.toISOString()}
-                                            className={`flex-shrink-0 border-r border-gold/10 flex flex-col items-center justify-center py-2
+                                            className={`flex-shrink-0 ${dir === 'rtl' ? 'border-l' : 'border-r'} border-gold/10 flex flex-col items-center justify-center py-2
                                                 ${isSameDay(day, new Date()) ? 'bg-gold/10' : ''}`}
                                             style={{ width: `${DAY_WIDTH}px` }}
                                         >
@@ -411,7 +417,7 @@ export default function CalendarPage() {
                                 {Object.values(groupedInventory).map((group: any) => (
                                     <div key={group.car.id} className="group-container">
                                         {/* Group Header */}
-                                        <div className="sticky left-0 z-10 w-full bg-luxury-gray/95 border-b border-gold/10 p-2 px-4 flex items-center justify-between backdrop-blur-sm">
+                                        <div className={`sticky ${dir === 'rtl' ? 'right-0' : 'left-0'} z-10 w-full bg-luxury-gray/95 border-b border-gold/10 p-2 px-4 flex items-center justify-between backdrop-blur-sm`}>
                                             <div className="font-bold text-gold text-sm">
                                                 {language === 'ar' && group.car.name_ar ? group.car.name_ar : group.car.name}
                                                 <span className="ml-2 text-luxury-white/40 text-xs font-normal">
@@ -471,7 +477,7 @@ export default function CalendarPage() {
                                                 <div key={item.id} className="flex relative hover:bg-white/5 transition-colors border-b border-gold/10">
                                                     {/* Row Header (Plate) */}
                                                     <div
-                                                        className="sticky left-0 z-10 w-48 md:w-64 bg-luxury-gray/90 border-r border-gold/20 p-3 pl-8 flex-shrink-0 flex items-center gap-3 backdrop-blur-sm"
+                                                        className={`sticky ${dir === 'rtl' ? 'right-0 border-l' : 'left-0 border-r'} z-10 w-48 md:w-64 bg-luxury-gray/90 border-gold/20 p-3 pl-8 px-8 flex-shrink-0 flex items-center gap-3 backdrop-blur-sm`}
                                                         style={{ height: `${rowHeight}px` }}
                                                     >
                                                         <div>
@@ -494,13 +500,13 @@ export default function CalendarPage() {
                                                         {daysInMonth.map((day) => (
                                                             <div
                                                                 key={day.toISOString()}
-                                                                className={`flex-shrink-0 border-r border-gold/5 h-full ${isSameDay(day, new Date()) ? 'bg-gold/5' : ''}`}
+                                                                className={`flex-shrink-0 ${dir === 'rtl' ? 'border-l' : 'border-r'} border-gold/5 h-full ${isSameDay(day, new Date()) ? 'bg-gold/5' : ''}`}
                                                                 style={{ width: `${DAY_WIDTH}px` }}
                                                             />
                                                         ))}
 
                                                         {positionedBookings.map((booking: any) => {
-                                                            const { left, width } = getBookingPosition(booking, DAY_WIDTH);
+                                                            const { offset, width } = getBookingPosition(booking, DAY_WIDTH);
                                                             const top = (booking.laneIndex * (EVENT_HEIGHT + EVENT_GAP)) + (ROW_PADDING / 2);
 
                                                             return (
@@ -509,7 +515,7 @@ export default function CalendarPage() {
                                                                     onClick={() => setSelectedBooking(booking)}
                                                                     className={`absolute rounded-md shadow-sm overflow-hidden cursor-pointer group hover:z-20 hover:brightness-110 transition-all ${getBookingStyle(booking)}`}
                                                                     style={{
-                                                                        left,
+                                                                        insetInlineStart: offset,
                                                                         width,
                                                                         top: `${top}px`,
                                                                         height: `${EVENT_HEIGHT}px`
