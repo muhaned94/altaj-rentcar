@@ -11,6 +11,7 @@ import { logAction } from "@/lib/audit";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import { useLanguage } from "@/lib/language-context";
+import { logBookingToN8n } from "@/app/actions/n8n";
 import {
     ArrowLeft,
     ArrowRight,
@@ -228,7 +229,7 @@ export default function BookingPage() {
             const selectedBranch = branches.find(b => b.id === formData.branch);
             const branchName = selectedBranch ? `${selectedBranch.name_ar} - ${selectedBranch.name}` : formData.branch;
 
-            const { error: insertError } = await supabase
+            const { data: booking, error: insertError } = await supabase
                 .from("bookings")
                 .insert({
                     car_id: selectedCar.id,
@@ -243,7 +244,9 @@ export default function BookingPage() {
                     total_amount: totalAmount,
                     notes: formData.notes || null,
                     status: "pending",
-                });
+                })
+                .select()
+                .single();
 
             if (insertError) throw insertError;
 
@@ -253,6 +256,13 @@ export default function BookingPage() {
                 'pending', // Using 'pending' as resource ID or similar since we might not have ID returned unless we select
                 `Customer: ${formData.customerName} | Branch: ${branchName} | Total: ${totalAmount}`
             );
+
+            // Log to N8n
+            await logBookingToN8n({
+                ...booking,
+                car_name: language === "ar" && selectedCar.name_ar ? selectedCar.name_ar : selectedCar.name,
+                source: 'public_website'
+            });
 
             // Send Telegram Notification
             try {

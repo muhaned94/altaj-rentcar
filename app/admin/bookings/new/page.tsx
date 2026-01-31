@@ -8,6 +8,7 @@ import { Car, Branch } from "@/lib/types";
 import { formatCurrency, calculateDays, calculateTotalAmount } from "@/lib/utils";
 import { useLanguage } from "@/lib/language-context";
 import { getAllowedBranchIds } from "@/lib/auth-helpers";
+import { logBookingToN8n } from "@/app/actions/n8n";
 import {
     Loader2,
     CheckCircle,
@@ -211,6 +212,13 @@ export default function AdminNewBookingPage() {
                 .single();
 
             if (insertError) throw insertError;
+
+            // Log to N8n
+            await logBookingToN8n({
+                ...booking,
+                car_name: language === "ar" && selectedCar.name_ar ? selectedCar.name_ar : selectedCar.name,
+                source: 'admin_panel'
+            });
 
             setBookingId(booking.id);
             setSuccess(true);
