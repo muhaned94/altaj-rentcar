@@ -9,12 +9,18 @@ export async function logBookingToN8n(bookingData: any) {
     }
 
     try {
+        // Sanitize phone number (remove + sign)
+        const payload = { ...bookingData };
+        if (payload.customer_phone && typeof payload.customer_phone === 'string') {
+            payload.customer_phone = payload.customer_phone.replace(/\+/g, '');
+        }
+
         const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(bookingData),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

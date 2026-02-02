@@ -26,6 +26,7 @@ import {
     Check
 } from "lucide-react";
 import { useLanguage } from "@/lib/language-context";
+import { logBookingToN8n } from "@/app/actions/n8n";
 import { Calendar } from "@/components/ui/calendar";
 import { addDays, format, isWithinInterval, startOfDay, parseISO, isSameDay } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -425,6 +426,13 @@ export default function BookingPage() {
                     `Status: pending`
                 ].join(' | ')
             );
+
+            // Log to N8n
+            await logBookingToN8n({
+                ...newBooking,
+                car_name: language === "ar" && car.name_ar ? car.name_ar : car.name,
+                source: 'public_website'
+            });
 
             // Send Telegram Notification
             try {
